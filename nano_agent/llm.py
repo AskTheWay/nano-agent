@@ -12,14 +12,41 @@ from openai import OpenAI
 
 @dataclass
 class Usage:
-    """一次请求的实际用量（API 返回，非估算）。"""
+    """一次请求的实际用量（API 返回，非估算）。
+
+    cached_tokens：prompt 里命中前缀缓存的部分（命中部分按约 0.1 倍计价，
+    对 agent 这种每轮重发同一前缀的负载是成本大头）。各家字段名不统一：
+    OpenAI 系在 usage.prompt_tokens_details.cached_tokens，Anthropic 系在
+    usage.cache_read_input_tokens，智谱国内版不返回（实测恒无此字段）。
+    """
 
     prompt_tokens: int = 0
     completion_tokens: int = 0
+    cached_tokens: int = 0
 
     @property
     def total(self) -> int:
         return self.prompt_tokens + self.completion_tokens
+
+
+def _extract_cached(usage_obj) -> int:
+    """从原始 usage 对象里尽力提取缓存命中的 token 数（各家字段名不同）。"""
+    # OpenAI 风格：usage.prompt_tokens_details.cached_tokens
+    details = getattr(usage_obj, "prompt_tokens_details", None)
+    cached = getattr(details, "cached_tokens", None)
+    if cached:
+        return cached
+    # Anthropic 风格：usage.cache_read_input_tokens（经 OpenAI 兼容层时字段同名下放）
+    cached = getattr(usage_obj, "cache_read_input_tokens", None)
+    if cached:
+        return cached
+    # 兜底：原始 dict 形态（部分网关直接塞在 usage 里）
+    if isinstance(usage_obj, dict):
+        return int(usage_obj.get("cached_tokens")
+                   or usage_obj.get("cache_tokens")
+                   or (usage_obj.get("prompt_tokens_details") or {}).get("cached_tokens")
+                   or 0)
+    return 0
 
 
 class LLMClient:
@@ -64,4 +91,5 @@ class LLMClient:
         if resp.usage:
             usage.prompt_tokens = resp.usage.prompt_tokens or 0
             usage.completion_tokens = resp.usage.completion_tokens or 0
+            usage.cached_tokens = _extract_cached(resp.usage)
         return m, usage

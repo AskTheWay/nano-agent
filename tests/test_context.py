@@ -1,6 +1,31 @@
 """token 估算单测（纯逻辑）。"""
 
 from nano_agent.context import estimate_text, estimate_messages
+from nano_agent.llm import _extract_cached
+
+
+# ========== 缓存命中字段提取（各家协议字段名不同） ==========
+
+class _OpenAIStyle:  # usage.prompt_tokens_details.cached_tokens
+    class prompt_tokens_details:  # noqa: N801
+        cached_tokens = 512
+
+
+class _AnthropicStyle:  # usage.cache_read_input_tokens
+    cache_read_input_tokens = 256
+
+
+class _Bare:  # 智谱国内版：只有基础字段
+    prompt_tokens = 100
+
+
+def test_cached_extraction_all_dialects():
+    assert _extract_cached(_OpenAIStyle()) == 512      # OpenAI 风格
+    assert _extract_cached(_AnthropicStyle()) == 256   # Anthropic 风格
+    assert _extract_cached(_Bare()) == 0               # 无字段 -> 0
+    assert _extract_cached({"prompt_tokens_details": {"cached_tokens": 128}}) == 128
+    assert _extract_cached({"cache_tokens": 64}) == 64  # OpenRouter dict 风格
+    assert _extract_cached({}) == 0
 
 
 def test_pure_english_quarter():

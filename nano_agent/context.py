@@ -81,6 +81,7 @@ class ContextManager:
         self.est_last = 0            # 最近一次请求前的估算
         self.api_prompt_total = 0    # 累计真实 prompt tokens（API 返回）
         self.api_completion_total = 0
+        self.cached_total = 0        # 累计命中前缀缓存的 prompt tokens
         self.compact_count = 0
         # 测试钩子：可注入假摘要函数（不触网）
         self.summarizer = None       # Callable[[str], str] | None
@@ -99,16 +100,24 @@ class ContextManager:
         """
         if self.est_last and usage.prompt_tokens:
             drift = (usage.prompt_tokens - self.est_last) / max(self.est_last, 1)
+            cached_note = (f"，其中缓存命中 {usage.cached_tokens}" if usage.cached_tokens
+                           else "")
             print(f"{ui.DIM}  [tokens] 估算 {self.est_last} | API 实际 "
-                  f"{usage.prompt_tokens}（偏差 {drift:+.1%}）{ui.RESET}")
+                  f"{usage.prompt_tokens}（偏差 {drift:+.1%}{cached_note}）{ui.RESET}")
         self.api_prompt_total += usage.prompt_tokens
         self.api_completion_total += usage.completion_tokens
+        self.cached_total += getattr(usage, "cached_tokens", 0)
 
     def report(self) -> str:
+        # 缓存命中率：命中部分按约 0.1 倍计价，是 agent 成本的关键杠杆
+        hit_rate = (f"{self.cached_total / self.api_prompt_total:.1%}"
+                    if self.api_prompt_total else "n/a")
         return (f"当前估算：历史 {estimate_messages(self.messages)} + "
                 f"工具定义 {self.schema_tokens} = {self.estimate()} tokens\n"
                 f"累计 API 用量：prompt {self.api_prompt_total} + "
                 f"completion {self.api_completion_total}\n"
+                f"缓存命中：{self.cached_total} tokens（命中率 {hit_rate}；"
+                f"0 = 端点未报告或无命中——智谱国内版不返回该字段）\n"
                 f"上下文预算：{self.token_limit}（超过 80% 触发自动压缩）\n"
                 f"已压缩次数：{self.compact_count}")
 
