@@ -40,7 +40,17 @@ def _cwd() -> str:
 # ========== 斜杠命令：本地拦截，不进模型 ==========
 
 def _cmd_help(agent) -> None:
-    print("命令：/help /exit /clear /tools /history [n]（M3 会加 /tokens /compact）")
+    print("命令：/help /exit /clear /tools /history [n] /tokens /compact")
+
+
+def _cmd_tokens(agent) -> None:
+    """M3：上下文用量报告（估算 vs API 实际）。"""
+    print(agent.context.report()) if agent.context else print("（M3 未启用）")
+
+
+def _cmd_compact(agent) -> None:
+    """M3：手动触发压缩（历史太短时会得到"没有可压缩"的反馈）。"""
+    print(agent.context.compact_now() if agent.context else "（M3 未启用）")
 
 
 def _cmd_tools(agent) -> None:
@@ -70,6 +80,8 @@ COMMANDS = {
     "/tools": _cmd_tools,
     "/history": _cmd_history,
     "/clear": _cmd_clear,
+    "/tokens": _cmd_tokens,
+    "/compact": _cmd_compact,
 }
 
 
@@ -80,6 +92,7 @@ def main() -> None:
     cfg = load_config()
 
     from .agent import Agent, LoopConfig          # noqa: E402
+    from .context import ContextManager           # noqa: E402
     from .tools import REGISTRY                   # noqa: E402  import 副作用完成工具注册
 
     agent = Agent(
@@ -88,6 +101,10 @@ def main() -> None:
         system_prompt=build_system_prompt(),
         loop_cfg=LoopConfig(max_turns=cfg.max_turns),
     )
+    # M3：上下文管理器注入（与 agent 共享同一个 messages 引用）
+    context = ContextManager(agent.messages, agent.llm, cfg.token_limit)
+    context.set_schema_tokens(REGISTRY.schema())  # 工具定义也占上下文，计入预算
+    agent.context = context
 
     print("=" * 56)
     print(f"  nano-agent M2 | 模型：{cfg.model}")
@@ -115,7 +132,10 @@ def main() -> None:
             if handler is None:
                 print(f"未知命令 {cmd}，/help 查看可用命令")
             else:
-                handler(agent, *args)  # /history 5 这类带参命令
+                try:
+                    handler(agent, *args)  # /history 5 这类带参命令
+                except Exception as e:  # /compact 内部要调 LLM，同样可能失败
+                    print(f"{ui.RED}[命令出错] {e}{ui.RESET}")
             continue
 
         try:

@@ -63,8 +63,7 @@ class Agent:
             if not tool_calls:  # 唯一的"智能"终止条件
                 return assistant["content"]
 
-            print(f"{ui.DIM}  [turn {turn}] {len(tool_calls)} 个工具调用 "
-                  f"({usage.prompt_tokens}+{usage.completion_tokens} tokens){ui.RESET}")
+            print(f"{ui.DIM}  [turn {turn}] {len(tool_calls)} 个工具调用{ui.RESET}")
             self._check_repeat(tool_calls)
             self._execute_calls(tool_calls)
 
