@@ -59,11 +59,14 @@ def test_compact_result_protocol_valid():
 def test_compact_shrinks_messages():
     cm = ContextManager(_mk_messages(), llm=None, token_limit=100)
     cm.summarizer = lambda s: "短摘要"
+    holder = cm.messages  # 模拟 Agent 持有的同一引用
     before = len(cm.messages)
     cm.compact_now()
-    assert len(cm.messages) < before  # 9 条 -> system+boundary+保留段
-    # 引用未断裂：调用方持有的还是同一个 list 对象
-    assert cm.messages is not None
+    assert len(cm.messages) < before  # 13 条 -> system+boundary+保留段
+    # 原地替换（messages[:] = ...）的验证：外部引用仍指向同一个 list 对象。
+    # 若实现错写成 self.messages = [...]（改绑定），该断言失败——
+    # Agent 那边就会指着旧列表，压缩静默失效。
+    assert cm.messages is holder
 
 
 def test_threshold_triggers_compact():

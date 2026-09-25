@@ -66,8 +66,10 @@ class Agent:
                 return assistant["content"]
 
             print(f"{self.indent}{ui.DIM}[turn {turn}] {len(tool_calls)} 个工具调用{ui.RESET}")
-            self._check_repeat(tool_calls)
             self._execute_calls(tool_calls)
+            # 重复检测放在回填【之后】：纠偏的 user 消息如果插在
+            # assistant(tool_calls) 和 tool 消息中间，会破坏协议配对顺序 -> 400
+            self._check_repeat(tool_calls)
 
         print(f"{self.indent}{ui.YELLOW}[max_turns] 达到 {self.cfg.max_turns} 轮上限，强制结束{ui.RESET}")
         return "（已达到最大轮数，任务被强制中止）"
@@ -79,59 +81,62 @@ class Agent:
 
         只读工具（read_only=True，无副作用、结果互不依赖）-> 可并行
         写工具（read_only=False，可能改文件/有副作用）      -> 必须串行
-        协议铁律：无论实际完成顺序如何，结果必须按 tool_calls 的【原顺序】append。
+        权限 ASK 的调用也归入串行组——交互确认只发生在主线程，
+        并行线程里弹 input 会交叉打架（这是把权限检查前置到分组阶段的原因；
+        DENY 的拒绝观测无副作用，在并行组里是安全的）。
+        协议铁律：结果统一收集，最后按 tool_calls 的【原顺序】append——
+        无论中途异常与否，finally 兜底保证每个 call 都有配对结果。
         """
-        # 第一步：解析全部参数（解析失败的先给错误观测，不进入调度）
-        parsed: list[tuple[int, dict | None]] = []
-        for i, tc in enumerate(tool_calls):
-            raw = tc["function"].get("arguments") or "{}"
-            try:
-                args = json.loads(raw)
-                if not isinstance(args, dict):
-                    raise ValueError
-            except (json.JSONDecodeError, ValueError):
-                parsed.append((i, None))
-                self._append_result(tool_calls[i],
-                                    f"[错误] arguments 不是合法 JSON：{raw[:200]}")
-                continue
-            parsed.append((i, args))
-
-        # 第二步：分组（M4 起，权限 ASK/DENY 的调用也归入串行组——
-        # 交互确认只发生在主线程，并行线程里弹 input 会交叉打架。
-        # 所以只读且权限放行的才进并行组，其余全进串行组。）
-        args_of = {i: a for i, a in parsed}  # index -> 参数 dict
-        read_idx, write_idx = [], []
-        for i, args in parsed:
-            if args is None:
-                continue
-            name = tool_calls[i]["function"]["name"]
-            spec = self.tools.get(name)
-            decision = self.permissions.check(name, args) if self.permissions else None
-            if spec is None or not spec.read_only or decision == Decision.ASK:
-                write_idx.append(i)  # 写工具 / 未知工具 / 需要确认的 -> 串行
-            else:
-                read_idx.append(i)   # 只读且放行 -> 并行安全
-
-        # 第三步：只读且 >=2 个才值得开线程池，否则串行更省
         results: dict[int, str] = {}
-        if len(read_idx) >= 2:
-            print(f"{self.indent}{ui.CYAN}[并行] {len(read_idx)} 个只读工具同时执行{ui.RESET}")
-            # with 块退出时会等全部任务完成（shutdown(wait=True)），随后取 result 安全
-            with ThreadPoolExecutor(max_workers=self.cfg.max_parallel_reads) as pool:
-                futures = {i: pool.submit(self._call_one, tool_calls[i], args_of[i])
-                           for i in read_idx}
-                results.update({i: fut.result() for i, fut in futures.items()})
-        else:
-            for i in read_idx:
+        try:
+            # 第一步：解析全部参数（失败的记错误观测，不进入调度）
+            parsed: list[tuple[int, dict]] = []
+            for i, tc in enumerate(tool_calls):
+                raw = tc["function"].get("arguments") or "{}"
+                try:
+                    args = json.loads(raw)
+                    if not isinstance(args, dict):
+                        raise ValueError
+                except (json.JSONDecodeError, ValueError):
+                    results[i] = f"[错误] arguments 不是合法 JSON：{raw[:200]}"
+                    continue
+                parsed.append((i, args))
+
+            # 第二步：分组（只读且非 ASK 才进并行组，其余全进串行组）
+            args_of = {i: a for i, a in parsed}  # index -> 参数 dict
+            read_idx, write_idx = [], []
+            for i, args in parsed:
+                name = tool_calls[i]["function"]["name"]
+                spec = self.tools.get(name)
+                decision = self.permissions.check(name, args) if self.permissions else None
+                if spec is None or not spec.read_only or decision == Decision.ASK:
+                    write_idx.append(i)  # 写工具 / 未知工具 / 需要确认的 -> 串行
+                else:
+                    read_idx.append(i)   # 只读且无需交互 -> 并行安全
+
+            # 第三步：只读且 >=2 个才值得开线程池，否则串行更省
+            if len(read_idx) >= 2:
+                print(f"{self.indent}{ui.CYAN}[并行] {len(read_idx)} 个只读工具同时执行{ui.RESET}")
+                # with 块退出时会等全部任务完成（shutdown(wait=True)），随后取 result 安全
+                with ThreadPoolExecutor(max_workers=self.cfg.max_parallel_reads) as pool:
+                    futures = {i: pool.submit(self._call_one, tool_calls[i], args_of[i])
+                               for i in read_idx}
+                    results.update({i: fut.result() for i, fut in futures.items()})
+            else:
+                for i in read_idx:
+                    results[i] = self._call_one(tool_calls[i], args_of[i])
+
+            # 第四步：其余调用逐个串行（ASK 的交互确认也只发生在这里）
+            for i in write_idx:
                 results[i] = self._call_one(tool_calls[i], args_of[i])
-
-        # 第四步：写工具逐个串行（顺序执行，一个完成才做下一个）
-        for i in write_idx:
-            results[i] = self._call_one(tool_calls[i], args_of[i])
-
-        # 第五步：按原顺序回填（协议铁律：乱序会被严格网关按 id 校验拒绝）
-        for i in sorted(results):
-            self._append_result(tool_calls[i], results[i])
+        finally:
+            # 第五步（协议兜底）：即使中途异常逃逸，也要给每个 call 补上
+            # 配对结果——否则留下孤儿 assistant(tool_calls)，此后每轮请求
+            # 都会被严格网关按 id 校验拒绝
+            for i in range(len(tool_calls)):
+                results.setdefault(i, "[错误] 执行中断（该工具未运行）")
+            for i in sorted(results):
+                self._append_result(tool_calls[i], results[i])
 
     def _spec_of(self, tc: dict):
         return self.tools.get(tc["function"]["name"])

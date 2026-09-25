@@ -36,9 +36,11 @@ class LLMClient:
         返回 (assistant 消息裸 dict, usage)。
 
         兜底清单（各兼容网关的真实差异，实测踩出来的）：
-        - tool_calls 可能为 None（模型本轮不调工具） -> 统一成 []
+        - tool_calls 为 None/缺失时【省略】该字段，取 [] 的兜底在 agent.py
+          的 .get("tool_calls", []) —— 两层各管一段
         - arguments 是 JSON *字符串*               -> 解析容错放在 agent.py
-        - 不传 parallel_tool_calls 参数             -> 部分网关直接 400
+        - 不传 parallel_tool_calls 参数             -> 一旦显式传（哪怕 false）
+                                                     部分网关直接 400
         - schema 不用 strict 字段                   -> OpenAI 专属，兼容端会拒
         """
         resp = self._client.chat.completions.create(

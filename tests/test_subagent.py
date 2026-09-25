@@ -1,25 +1,25 @@
-"""子代理单测：上下文隔离 + 工具子集防递归（FakeLLM，不触网）。"""
+"""子代理单测：上下文隔离 + 工具子集防递归（FakeLLM，不触网、hermetic）。"""
 
+from conftest import FakeLLM
 from nano_agent.subagent import SUBAGENT_TYPES, run_task
 from nano_agent.tools import REGISTRY
-from conftest import FakeLLM
 
 
 def test_researcher_tools_have_no_task():
     """闸 2：子代理的工具子集不含 task——结构性防递归。"""
     from nano_agent.tools import task as task_tool
 
-    class _P:  # 权限替身（run_task 只透传给 Agent）
-        pass
-
-    task_tool.install(FakeLLM(), None)  # 先注册 task
+    task_tool.install(FakeLLM(), None)  # 先注册 task（autouse fixture 会恢复）
     sub = REGISTRY.subset(SUBAGENT_TYPES["researcher"]["allowed_tools"])
     assert sub.get("read_file") is not None
     assert sub.get("task") is None  # 不能再派孙代理
 
 
-def test_run_task_isolated_from_caller_context():
+def test_run_task_isolated_from_caller_context(tmp_path, monkeypatch):
     """闸 1：子代理的中间消息不进入任何外部列表，只返回摘要文本。"""
+    monkeypatch.chdir(tmp_path)  # hermetic：grep 只搜临时目录，不碰真实仓库
+    (tmp_path / "a.py").write_text("def foo():\n    pass\n", encoding="utf-8")
+
     class SubFakeLLM:
         """子代理剧本：一轮 grep + 一轮收尾。"""
 
@@ -33,10 +33,10 @@ def test_run_task_isolated_from_caller_context():
                     {"id": "s1", "type": "function",
                      "function": {"name": "grep", "arguments": '{"pattern": "def "}'}},
                 ]}, None
-            return {"role": "assistant", "content": "调研结论：共 12 处函数定义。"}, None
+            return {"role": "assistant", "content": "调研结论：共 1 处函数定义。"}, None
 
     result = run_task(SubFakeLLM(), REGISTRY, permissions=None,
-                      description="统计项目里有多少函数")
+                      description="统计有多少函数")
     assert "调研结论" in result          # 摘要在返回值里
     assert "[子代理 researcher 完成]" in result
     assert "工具调用 1 次" in result

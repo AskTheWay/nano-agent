@@ -69,6 +69,9 @@ Claude Code 官方 agent-loop 文档明确描述了这个规则，原因值得�
    并行会引入竞态。哪怕两个写互不相干，串行的代价也只是几十毫秒。
 3. **协议铁律**：并行执行完成顺序是乱的，但回填必须按 `tool_calls` 的**原顺序**
    append——严格网关会按 id 逐条校验 assistant(tool_calls) 与 tool 消息的配对。
+   实现上所有结果统一收集到一个 dict，最后一次性按序回填；`finally` 兜底
+   保证即使中途异常，每个 call 也有配对结果（否则孤儿 assistant(tool_calls)
+   会让之后每轮请求都被拒）。
    （`tests/test_truncate.py::test_tool_result_order_preserved` 用"故意的慢工具"
    端到端验证了这一点。）
 

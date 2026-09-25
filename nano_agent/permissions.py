@@ -98,12 +98,17 @@ class PermissionEngine:
         try:
             with open(path, encoding="utf-8") as f:
                 cfg = json.load(f)
-        except (OSError, json.JSONDecodeError) as e:
+            # 先解析到局部变量、全部成功才赋值——半加载状态（allow 已生效
+            # 而 deny 解析失败保持空）会把本该 deny 的调用静默放行
+            allow = [Rule(r) for r in cfg.get("allow", [])]
+            deny = [Rule(r) for r in cfg.get("deny", [])]
+            default = Decision(cfg.get("default", "ask"))
+        except (OSError, json.JSONDecodeError, ValueError) as e:
+            # ValueError 覆盖：规则字符串语法错误（如 "read_file(" 漏右括号）、
+            # 非法的 default 值——配置问题不该崩掉启动
             print(f"{ui.YELLOW}[权限] 配置读取失败（{e}），按最保守模式运行{ui.RESET}")
             return
-        self.allow = [Rule(r) for r in cfg.get("allow", [])]
-        self.deny = [Rule(r) for r in cfg.get("deny", [])]
-        self.default = Decision(cfg.get("default", "ask"))
+        self.allow, self.deny, self.default = allow, deny, default
 
     # ---------- 判定 ----------
 

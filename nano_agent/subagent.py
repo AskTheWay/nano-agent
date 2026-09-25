@@ -55,7 +55,7 @@ def run_task(llm, tools, permissions, description: str,
         system_prompt=spec["system_prompt"],
         loop_cfg=LoopConfig(max_turns=spec["max_turns"]),
         permissions=permissions,          # 闸 3：复用主权限引擎
-        indent="    ",                    # 缩进两格：sidechain 的终端可见性
+        indent="    ",                    # 缩进显示：sidechain 在终端上的可见性
     )
     summary = sub.run(description)        # 闸 1：全新 messages，与主上下文零共享
 

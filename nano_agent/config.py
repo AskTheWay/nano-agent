@@ -21,8 +21,13 @@ class AppConfig:
         self.api_key = os.environ.get("OPENAI_API_KEY", "")
         self.model = os.environ.get("MODEL_NAME", "")
         extra = os.environ.get("OPENAI_EXTRA_BODY", "").strip()
-        # 额外请求体：mimo 的 {"thinking": {"type": "disabled"}} 这类私有参数
-        self.extra_body = json.loads(extra) if extra else None
+        # 额外请求体：mimo 的 {"thinking": {"type": "disabled"}} 这类私有参数。
+        # 非法 JSON 不该崩启动——置 None 并警告。
+        try:
+            self.extra_body = json.loads(extra) if extra else None
+        except json.JSONDecodeError:
+            print(f"[警告] OPENAI_EXTRA_BODY 不是合法 JSON，已忽略：{extra[:100]}")
+            self.extra_body = None
         self.max_turns = int(os.environ.get("MAX_TURNS", "25"))
         self.bash_timeout = int(os.environ.get("BASH_TIMEOUT", "10"))
         self.token_limit = int(os.environ.get("TOKEN_LIMIT", "30000"))  # M3 生效

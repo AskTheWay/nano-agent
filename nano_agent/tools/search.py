@@ -16,6 +16,11 @@ from .registry import tool
 SKIP_DIRS = {".git", "__pycache__", "node_modules", ".venv", ".pytest_cache"}
 
 
+def _skipped(path: str) -> bool:
+    """按路径段判断（不是子串！）。子串匹配会把 .gitignore/.github 也误杀掉。"""
+    return any(seg in SKIP_DIRS for seg in path.replace("\\", "/").split("/"))
+
+
 @tool(read_only=True)
 def glob(pattern: Annotated[str, "glob 模式，如 '**/*.py'（** 表示递归任意层）"],
         path: Annotated[str, "搜索的根目录，默认当前目录"] = ".") -> str:
@@ -24,7 +29,7 @@ def glob(pattern: Annotated[str, "glob 模式，如 '**/*.py'（** 表示递归�
         return f"[错误] 目录不存在：{path}"
     matches = sorted(
         p for p in globlib.glob(os.path.join(path, pattern), recursive=True)
-        if os.path.isfile(p) and not any(s in p for s in SKIP_DIRS)
+        if os.path.isfile(p) and not _skipped(p)
     )
     if not matches:
         return "(无匹配文件)"

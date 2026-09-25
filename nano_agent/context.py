@@ -46,7 +46,7 @@ def estimate_messages(msgs: list[dict]) -> int:
 # ========== 压缩安全边界（本机制最大的坑，单独成函数） ==========
 
 def find_safe_boundary(messages: list[dict], keep_recent: int = 6) -> int:
-    """返回可以被压缩掉的最旧边界 index（messages[boundary:] 保留）。
+    """返回保留段的起点 index（messages[boundary:] 保留，可压缩 messages[1:boundary]）。
 
     协议约束决定了算法：带 tool_calls 的 assistant 之后必须紧跟配对的
     tool 消息。所以保留段的起点【必须是 user 消息】——
@@ -54,7 +54,8 @@ def find_safe_boundary(messages: list[dict], keep_recent: int = 6) -> int:
     停在第一条 user 上。这样被压缩段里 assistant(tool_calls) 与其
     tool 结果"同生共死"，不会产生孤儿。
 
-    返回 1 表示只能压缩掉第一条（system 之后的全部都太新/结构不安全）。
+    注意返回 1 的含义：boundary=1 时被压缩段是 messages[1:1] = 空——
+    即"历史太短/结构不允许，一条也压不掉"，调用方要处理这种情况。
     """
     i = len(messages) - keep_recent
     i = max(i, 1)  # 永不动 system（index 0）
@@ -122,6 +123,11 @@ class ContextManager:
         self.est_last = self.estimate()
         if self.est_last > self.token_limit * 0.8:
             self.compact_now()
+            # 压缩后复检：保留窗口自身超预算时压缩已经救不了
+            # （单条超大消息/预算过小），必须让用户看见而不是静默失效
+            if self.estimate() > self.token_limit * 0.8:
+                print(f"{ui.RED}[compact] 压缩后仍超预算——单条消息过大或预算过小，"
+                      f"建议 /clear 或调大 TOKEN_LIMIT{ui.RESET}")
 
     def compact_now(self) -> str:
         """执行压缩并原地替换 messages（保持引用不断裂——Agent 持有同一个 list）。"""

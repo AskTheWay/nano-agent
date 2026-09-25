@@ -3,7 +3,6 @@
     "read_file",
     "glob",
     "grep",
-    "list_dir",
     "task",
     "bash(git status)",
     "bash(git diff:*)",

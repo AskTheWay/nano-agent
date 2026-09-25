@@ -20,6 +20,13 @@ def test_tool_result_order_preserved():
     from nano_agent.agent import Agent, LoopConfig
     from nano_agent.tools import REGISTRY
 
+    llm = FakeLLM([
+        {"calls": [
+            {"name": "read_file", "args": {"path": "f1.txt"}, "id": "c1"},
+            {"name": "read_file", "args": {"path": "f2.txt"}, "id": "c2"},
+        ]},
+        {"text": "done"},
+    ])
     spec = REGISTRY.get("read_file")
     orig = spec.func
 
@@ -31,7 +38,7 @@ def test_tool_result_order_preserved():
 
     spec.func = slow_read  # dataclass 字段直接替换，测完还原
     try:
-        agent = Agent(FakeLLM(), REGISTRY, "sys", LoopConfig(max_turns=3))
+        agent = Agent(llm, REGISTRY, "sys", LoopConfig(max_turns=3))
         agent.run("test")
     finally:
         spec.func = orig

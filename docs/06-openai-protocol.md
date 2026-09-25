@@ -82,7 +82,7 @@
 | 不做 | 原因 |
 |---|---|
 | streaming | 见第三节 |
-| MCP | 传输层协议（stdio/SSE）与 agent 机制正交，demo/mcp 已有样例 |
+| MCP | 传输层协议（stdio/SSE）与 agent 机制正交，是很好的下一个练习 |
 | 多模态 | 图片消息结构，对循环机制无增量 |
 | 持久化会话 | 官方是 JSONL append + resume；教学版内存即可（很好的扩展练习） |
 | strict schema / parallel_tool_calls 参数 | 兼容网关会拒 |

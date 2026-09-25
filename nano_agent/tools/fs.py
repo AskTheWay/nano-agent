@@ -14,24 +14,32 @@ from .registry import tool
 
 @tool(read_only=True)
 def read_file(path: Annotated[str, "文件路径，相对当前工作目录"],
-              offset: Annotated[int, "起始行号，从 1 开始"] = 1,
+              offset: Annotated[int, "起始行号，从 1 开始（按原始文件行号）"] = 1,
               limit: Annotated[int, "最多读取的行数，0 表示读到末尾"] = 0) -> str:
-    """读取文本文件内容，带行号前缀；超长时保留头尾并标注省略行数。"""
+    """读取文本文件内容，带原始行号前缀；段超长时保留头尾并标注省略行数。
+
+    顺序很关键：先按 offset/limit 从原始文件切片，后做展示截断——
+    反过来的话 300 行文件的第 150 行永远读不到（截断后只剩 121 个元素），
+    还会返回"第 150 行起没有内容"这种虚假错误。展示截断保留原始行号，
+    模型引用行号才不会错位。
+    """
     try:
         with open(path, encoding="utf-8", errors="replace") as f:
             lines = f.read().splitlines()
     except OSError as e:
         return f"[错误] 读取失败：{e}"
     total = len(lines)
-    if total > 120:  # 给模型看的截断：头 100 + 尾 20（人看的回显截断在 ui.py，两套阈值）
-        lines = lines[:100] + [f"...（省略 {total - 120} 行）..."] + lines[-20:]
-    if limit:
-        lines = lines[offset - 1: offset - 1 + limit]
-    else:
-        lines = lines[offset - 1:]
-    if not lines:
+    seg = lines[offset - 1: offset - 1 + limit] if limit else lines[offset - 1:]
+    if not seg:
         return f"[错误] 第 {offset} 行起没有内容（文件共 {total} 行）"
-    return "\n".join(f"{i:>5}  {line}" for i, line in enumerate(lines, offset))
+
+    if len(seg) > 120:  # 给模型看的截断：头 100 + 尾 20（终端回显截断在 ui.py，两套阈值）
+        numbered = [f"{offset + i:>5}  {line}" for i, line in enumerate(seg[:100])]
+        numbered.append(f"      ...（省略 {len(seg) - 120} 行）...")
+        numbered += [f"{offset + len(seg) - 20 + j:>5}  {line}"
+                     for j, line in enumerate(seg[-20:])]
+        return "\n".join(numbered)
+    return "\n".join(f"{offset + i:>5}  {line}" for i, line in enumerate(seg))
 
 
 # ========== 写：有副作用，必须串行 ==========
@@ -61,7 +69,12 @@ def edit_file(path: Annotated[str, "目标文件路径"],
               new_str: Annotated[str, "替换后的新文本"]) -> str:
     """精确替换文件中的一段文本（str_replace 语义：old_str 必须唯一匹配）。"""
     try:
-        with open(path, encoding="utf-8", errors="replace") as f:
+        # 读-改-写回路的编码纪律：surrogateescape 让无法解码的字节以 lone
+        # surrogate 原样往返，回写时还原成原始字节——绝不触碰与本次编辑无关
+        # 的内容。对比 errors='replace'：会把 GBK 等非 UTF-8 字节永久替换成
+        # U+FFFD（不可逆损坏），哪怕 old_str/new_str 都是纯 ASCII。
+        # newline="" 同理：不做 universal newlines 翻译，保留原始 CRLF/LF。
+        with open(path, encoding="utf-8", errors="surrogateescape", newline="") as f:
             text = f.read()
     except OSError as e:
         return f"[错误] 读取失败：{e}"
@@ -75,7 +88,7 @@ def edit_file(path: Annotated[str, "目标文件路径"],
         return (f"[错误] old_str 在 {path} 中匹配到 {n} 处，不唯一。"
                 f"请在 old_str 中多带几行上下文，使其只匹配一处。")
     try:
-        with open(path, "w", encoding="utf-8", newline="\n") as f:
+        with open(path, "w", encoding="utf-8", errors="surrogateescape", newline="") as f:
             f.write(text.replace(old_str, new_str, 1))
     except OSError as e:
         return f"[错误] 写入失败：{e}"

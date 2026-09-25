@@ -60,10 +60,11 @@ def _cmd_tools(agent) -> None:
         print(f"  {name:<12} {tag}  {spec.description[:40]}")
 
 
-def _cmd_history(agent, n: int = 6) -> None:
-    """渲染最近 n 条消息（role 着色，tool 消息截断显示）。"""
+def _cmd_history(agent, n: str = "6") -> None:
+    """渲染最近 n 条消息（role 着色，tool 消息截断显示）。斜杠命令的参数是字符串。"""
+    n_int = max(1, int(n))
     color = {"system": ui.DIM, "user": ui.CYAN, "assistant": ui.GREEN, "tool": ui.DIM}
-    for m in agent.messages[-n:]:
+    for m in agent.messages[-n_int:]:
         head = f"{color.get(m['role'], '')}{m['role']}{ui.RESET}"
         body = m.get("content") or f"<tool_calls: {len(m.get('tool_calls', []))} 个>"
         print(f"  {head:<12} {ui.truncate_for_display(body, 160)}")
@@ -151,6 +152,10 @@ def main() -> None:
 
         try:
             answer = agent.run(user_input)
+        except KeyboardInterrupt:
+            # Ctrl+C 的语义是"中止当前任务"，不是退出 REPL
+            print(f"\n{ui.YELLOW}（已中止本轮任务，继续对话或 /exit 退出）{ui.RESET}")
+            continue
         except Exception as e:  # 网络/鉴权错误兜底，REPL 不崩
             print(f"\n{ui.RED}[出错了] {e}{ui.RESET}\n（检查 .env 配置与网络后重试）")
             continue

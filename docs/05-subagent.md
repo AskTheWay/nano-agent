@@ -50,8 +50,10 @@ sub = Agent(llm, sub_tools, spec["system_prompt"], ..., permissions=permissions,
   这也是为什么 task 不走 `@tool` 的 import 注册：**注册时机由依赖决定**。
 
 扩展一个新子代理类型 = 往 `SUBAGENT_TYPES` 加一个条目（比如 writer：
-允许 edit_file/write_file，system prompt 强调先读后改）。官方的内建类型
-（general-purpose / Plan / Explore）就是同一思想的完整版。
+允许 edit_file/write_file，system prompt 强调先读后改）。task 工具的
+agent_type 参数描述是从类型表动态生成的，加完条目模型侧立即可见——
+不需要改任何其他代码。官方的内建类型（general-purpose / Plan / Explore）
+就是同一思想的完整版。
 
 ## 四、子代理与主 agent 的生命周期对比
 

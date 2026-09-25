@@ -30,7 +30,7 @@ git diff m1-loop m2-tools      # 看这一层加了什么（增量即一节课�
 | `llm.bind_tools([search, ...])` | 手写 JSON schema dict → m2 的 `@tool` 装饰器自动生成 | m1→m2 |
 | `HumanMessage / AIMessage / ToolMessage` | `{"role": "user"/"assistant"/"tool", ...}` 裸 dict | m1 |
 | `add_messages` reducer | `messages.append(...)` | m1 |
-| `tool.func.invoke(tc["args"])` | `func(**json.loads(tc["arguments"]))` | m1 |
+| `tool_func.invoke(tc["args"])` | `func(**json.loads(tc["arguments"]))` | m1 |
 | 框架内置的重试/异常包装 | 错误即观测（error as observation） | m1 |
 
 **核心领悟**：agent 框架没有魔法。图是循环，消息是 dict，绑定工具是 schema 生成。
