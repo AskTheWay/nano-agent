@@ -1,0 +1,10 @@
+# 密钥与本地配置
+.env
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# 测试沙箱产物
+sandbox/
