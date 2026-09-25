@@ -34,3 +34,16 @@ def truncate_for_display(text: str, limit: int = 400) -> str:
     if len(text) <= limit:
         return text
     return text[: limit // 2] + f"\n{DIM}...（回显截断，共 {len(text)} 字符）{RESET}"
+
+
+# ========== 权限确认交互（M4） ==========
+
+def confirm(tool_name: str, args: dict) -> str:
+    """终端 y/n/a 确认。返回 'y' / 'n' / 'a'（always，本会话内同类放行）。"""
+    brief = ", ".join(f"{k}={str(v)[:80]!r}" for k, v in list(args.items())[:3])
+    print(f"{YELLOW}  [权限确认] 即将执行 {tool_name}({brief}){RESET}")
+    while True:
+        ans = input("  允许执行吗？[y=允许 n=拒绝 a=本会话总是允许] ").strip().lower()
+        if ans in ("y", "n", "a"):
+            return ans
+        print("  请输入 y / n / a")

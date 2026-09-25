@@ -40,7 +40,7 @@ def _cwd() -> str:
 # ========== 斜杠命令：本地拦截，不进模型 ==========
 
 def _cmd_help(agent) -> None:
-    print("命令：/help /exit /clear /tools /history [n] /tokens /compact")
+    print("命令：/help /exit /clear /tools /history [n] /tokens /compact /permissions")
 
 
 def _cmd_tokens(agent) -> None:
@@ -82,6 +82,8 @@ COMMANDS = {
     "/clear": _cmd_clear,
     "/tokens": _cmd_tokens,
     "/compact": _cmd_compact,
+    "/permissions": lambda agent: print(agent.permissions.describe())
+    if agent.permissions else print("（M4 未启用）"),
 }
 
 
@@ -93,13 +95,17 @@ def main() -> None:
 
     from .agent import Agent, LoopConfig          # noqa: E402
     from .context import ContextManager           # noqa: E402
+    from .permissions import PermissionEngine     # noqa: E402
     from .tools import REGISTRY                   # noqa: E402  import 副作用完成工具注册
 
+    import os
+    perm_path = os.path.join(os.getcwd(), "permissions.json")
     agent = Agent(
         llm=LLMClient(cfg),
         tools=REGISTRY,
         system_prompt=build_system_prompt(),
         loop_cfg=LoopConfig(max_turns=cfg.max_turns),
+        permissions=PermissionEngine(perm_path),  # M4：权限引擎注入
     )
     # M3：上下文管理器注入（与 agent 共享同一个 messages 引用）
     context = ContextManager(agent.messages, agent.llm, cfg.token_limit)

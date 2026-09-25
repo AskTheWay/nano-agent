@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from .llm import LLMClient, Usage
+from .permissions import Decision, denied_observation
 from .tools.registry import ToolRegistry
 from . import ui
 
@@ -94,14 +95,23 @@ class Agent:
                 continue
             parsed.append((i, args))
 
-        # 第二步：按 spec.read_only 分组
-        read_idx = [i for i, args in parsed
-                    if args is not None and self._spec_of(tool_calls[i]).read_only]
-        write_idx = [i for i, args in parsed
-                     if args is not None and not self._spec_of(tool_calls[i]).read_only]
+        # 第二步：分组（M4 起，权限 ASK/DENY 的调用也归入串行组——
+        # 交互确认只发生在主线程，并行线程里弹 input 会交叉打架。
+        # 所以只读且权限放行的才进并行组，其余全进串行组。）
+        args_of = {i: a for i, a in parsed}  # index -> 参数 dict
+        read_idx, write_idx = [], []
+        for i, args in parsed:
+            if args is None:
+                continue
+            name = tool_calls[i]["function"]["name"]
+            spec = self.tools.get(name)
+            decision = self.permissions.check(name, args) if self.permissions else None
+            if spec is None or not spec.read_only or decision == Decision.ASK:
+                write_idx.append(i)  # 写工具 / 未知工具 / 需要确认的 -> 串行
+            else:
+                read_idx.append(i)   # 只读且放行 -> 并行安全
 
         # 第三步：只读且 >=2 个才值得开线程池，否则串行更省
-        args_of = {i: a for i, a in parsed}  # index -> 参数 dict
         results: dict[int, str] = {}
         if len(read_idx) >= 2:
             print(f"{ui.CYAN}  [并行] {len(read_idx)} 个只读工具同时执行{ui.RESET}")
@@ -126,10 +136,24 @@ class Agent:
         return self.tools.get(tc["function"]["name"])
 
     def _call_one(self, tc: dict, args: dict) -> str:
-        """执行单个工具调用：未知工具/执行异常都转成错误观测文本。"""
+        """执行单个工具调用：权限检查 -> 未知工具/执行异常都转成错误观测文本。"""
         name = tc["function"]["name"]
         spec = self.tools.get(name)
         arg_str = ", ".join(f"{k}={v!r}" for k, v in args.items())
+
+        # M4：执行前的权限闸门（分组阶段已保证 ASK 只出现在串行路径）
+        if self.permissions:
+            decision = self.permissions.check(name, args)
+            if decision == Decision.DENY:
+                print(f"{ui.RED}    [权限拒绝] {name}({arg_str}){ui.RESET}")
+                return denied_observation(name, args)
+            if decision == Decision.ASK:
+                ans = ui.confirm(name, args)
+                if ans == "n":
+                    return denied_observation(name, args)
+                if ans == "a":
+                    self.permissions.remember_allow(name, args)
+
         if spec is None:
             print(f"{ui.RED}    -> {name}({arg_str}){ui.RESET}")
             return f"[错误] 未知工具：{name}"

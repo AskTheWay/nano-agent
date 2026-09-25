@@ -1,0 +1,26 @@
+{
+  "allow": [
+    "read_file",
+    "glob",
+    "grep",
+    "list_dir",
+    "bash(git status)",
+    "bash(git diff:*)",
+    "bash(python -m pytest:*)",
+    "bash(dir)",
+    "bash(type:*)"
+  ],
+  "deny": [
+    "bash(rm:*)",
+    "bash(del:*)",
+    "bash(rmdir:*)",
+    "bash(curl:*)",
+    "bash(Invoke-WebRequest:*)",
+    "read_file(.env)",
+    "read_file(**/.env)",
+    "read_file(**/credentials*)",
+    "write_file(**/.env)",
+    "write_file(**/permissions.json)"
+  ],
+  "default": "ask"
+}
