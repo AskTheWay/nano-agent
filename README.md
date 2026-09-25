@@ -32,25 +32,57 @@ copy .env.example .env      # 填入你的 OPENAI_BASE_URL / OPENAI_API_KEY / MO
 python -m nano_agent
 ```
 
-任意 OpenAI 兼容端点都可以：小米 mimo、智谱、DeepSeek、OpenRouter、官方 API，
-换个 `OPENAI_BASE_URL` 就行。
+任意 OpenAI 兼容端点都可以：智谱、DeepSeek、小米 mimo、OpenRouter、官方 API，
+换个 `OPENAI_BASE_URL` 就行（各端点实测差异见 docs/06）。
+
+测试：`python -m pytest tests/ -q`（38 个单测，全部不触网）
 
 ## 学习路线（tag 导览）
 
 每个 tag 都是一个**完整可运行**的状态，`git diff` 相邻 tag 就是该机制的增量：
 
-| tag | 机制 | 代码量 | 配套文档 |
+| tag | 机制 | 新增代码 | 配套文档 |
 |---|---|---|---|
 | `m0-init` | 项目骨架与安全基线 | — | — |
-| `m1-loop` | 最小 agent loop（手写 schema） | ~230 行 | docs/01-agent-loop.md |
-| `m2-tools` | 工具注册表 + coding 工具集 + 只读并行调度 | ~600 行 | docs/02-tools.md |
-| `m3-context` | token 估算 + 自动压缩 | ~750 行 | docs/03-context.md |
-| `m4-permissions` | deny-first 权限系统 | ~870 行 | docs/04-permissions.md |
-| `m5-subagent` | 子代理上下文隔离 | ~1000 行 | docs/05-subagent.md |
+| `m1-loop` | 最小 agent loop（手写 schema） | ~250 行 | [01-agent-loop.md](docs/01-agent-loop.md) |
+| `m2-tools` | 工具注册表 + 工具集 + 只读并行调度 | +350 行 | [02-tools.md](docs/02-tools.md) |
+| `m3-context` | token 估算（含工具定义）+ 自动压缩 | +150 行 | [03-context.md](docs/03-context.md) |
+| `m4-permissions` | deny-first 权限系统 | +170 行 | [04-permissions.md](docs/04-permissions.md) |
+| `m5-subagent` | 子代理上下文隔离 | +110 行 | [05-subagent.md](docs/05-subagent.md) |
 
 ```bash
 git checkout m1-loop          # 回到最小循环，看着它长大
 git diff m1-loop m2-tools     # 看工具系统是怎么加上去的
 ```
 
-> README 会随每一层推进持续更新，学习路线与面试叙事在 M5 完成后补全。
+总量：源码 ~1280 行（含中文注释）/ 测试 ~430 行 / 详解文档 7 篇。
+
+## 五分钟试一圈
+
+```
+你> 同时读 README.md 和 requirements.txt，分别总结核心内容     # <- 只读并行调度
+你> 在 sandbox 里创建 hello.py 写个打印函数然后运行它           # <- 写串行 + bash
+y                                                              # <- 权限确认
+你> 帮我读一下 .env                                            # <- deny 直接拒绝
+你> 用 task 派一个子代理调研这个项目的工具注册情况               # <- 子代理隔离
+你> /tokens                                                    # <- 上下文用量
+你> /permissions                                               # <- 权限规则
+```
+
+## 这个项目证明你理解什么（面试速查）
+
+| 层 | 一句话 |
+|---|---|
+| M1 | 消息历史是裸 dict，图是 while，bind_tools 是 schema 生成；tool_calls 回填有序否则 400 |
+| M2 | inspect+Annotated 反射生成 schema；只读并行/写串行，结果按原序回填 |
+| M3 | 上下文=消息+工具定义；压缩要找 user 边界防孤儿 tool 消息；估算偏差实测 -5% |
+| M4 | deny-first 三态判定；ASK 交互前置到调度分组（多线程不能抢 stdin）；拒绝即观测 |
+| M5 | 子代理=上下文沙箱，只回传摘要；工具子集防递归是结构性防御；权限共享防绕过 |
+
+每篇文档末尾的"面试里怎么说"段落是这些要点的展开版。
+
+## 边界（刻意不做的）
+
+streaming / MCP / 多模态 / 会话持久化 / strict schema——每一条的取舍理由见
+[docs/06-openai-protocol.md](docs/06-openai-protocol.md) 第五节。
+它们都是不错的扩展练习。
