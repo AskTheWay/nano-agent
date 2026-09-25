@@ -4,6 +4,7 @@
     "glob",
     "grep",
     "list_dir",
+    "task",
     "bash(git status)",
     "bash(git diff:*)",
     "bash(python -m pytest:*)",

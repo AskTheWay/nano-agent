@@ -1,5 +1,6 @@
 """展示层截断单测 + 调度原序回填的逻辑验证（不触网）。"""
 
+from conftest import FakeLLM
 from nano_agent.ui import truncate_for_display
 
 
@@ -11,34 +12,6 @@ def test_long_truncated_with_marker():
     out = truncate_for_display("x" * 1000, limit=100)
     assert "回显截断" in out
     assert out.startswith("x" * 50)  # 前半保留
-
-
-# ========== 调度铁律：并行结果按 tool_calls 原序回填 ==========
-
-class _U:
-    """最小 Usage 替身。"""
-
-    def __init__(self, p, c):
-        self.prompt_tokens, self.completion_tokens = p, c
-        self.total = p + c
-
-
-class FakeLLM:
-    """两轮固定剧本：第一轮并行请求读两个文件，第二轮收尾。"""
-
-    def __init__(self):
-        self.n = 0
-
-    def chat(self, messages, tools):
-        self.n += 1
-        if self.n == 1:
-            return {"role": "assistant", "content": "", "tool_calls": [
-                {"id": "c1", "type": "function",
-                 "function": {"name": "read_file", "arguments": '{"path": "f1.txt"}'}},
-                {"id": "c2", "type": "function",
-                 "function": {"name": "read_file", "arguments": '{"path": "f2.txt"}'}},
-            ]}, _U(10, 5)
-        return {"role": "assistant", "content": "done"}, _U(10, 5)
 
 
 def test_tool_result_order_preserved():

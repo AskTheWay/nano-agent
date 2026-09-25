@@ -112,8 +112,13 @@ def main() -> None:
     context.set_schema_tokens(REGISTRY.schema())  # 工具定义也占上下文，计入预算
     agent.context = context
 
+    # M5：注册 task 工具（需要 llm/permissions 依赖闭包，必须在 agent 组装后）
+    from .tools import task as task_tool  # noqa: E402
+    task_tool.install(agent.llm, agent.permissions)
+    context.set_schema_tokens(REGISTRY.schema())  # 重新计入（多了 task 的定义）
+
     print("=" * 56)
-    print(f"  nano-agent M2 | 模型：{cfg.model}")
+    print(f"  nano-agent | 模型：{cfg.model}")
     print(f"  工具：{', '.join(REGISTRY.names())}")
     print(f"  输入 /help 查看命令")
     print("=" * 56)

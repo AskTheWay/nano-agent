@@ -8,4 +8,6 @@ M5 会在末尾追加 task 工具的 import。
 """
 
 from .registry import REGISTRY, ToolRegistry, ToolSpec, tool  # noqa: F401
-from . import fs, search, shell  # noqa: F401  ← import 副作用就是注册动作
+from . import fs, search, shell, task  # noqa: F401  ← import 副作用就是注册动作
+# 注意：task.py 的 task 工具不在 import 时注册（它需要 main 传入依赖闭包），
+# main 组装时调用 task.install(llm, permissions) 完成注册。

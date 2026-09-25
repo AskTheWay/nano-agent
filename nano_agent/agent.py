@@ -32,11 +32,12 @@ class Agent:
 
     def __init__(self, llm: LLMClient, tools: ToolRegistry,
                  system_prompt: str, loop_cfg: LoopConfig | None = None,
-                 context=None, permissions=None) -> None:
+                 context=None, permissions=None, indent: str = "") -> None:
         # context / permissions 是 M3/M4 的注入位，M2 阶段保持 None
         self.llm = llm
         self.tools = tools
         self.cfg = loop_cfg or LoopConfig()
+        self.indent = indent  # M5：子代理的输出缩进（sidechain 可见性）
         self.context = context
         self.permissions = permissions
         self.messages: list[dict] = [{"role": "system", "content": system_prompt}]
@@ -64,11 +65,11 @@ class Agent:
             if not tool_calls:  # 唯一的"智能"终止条件
                 return assistant["content"]
 
-            print(f"{ui.DIM}  [turn {turn}] {len(tool_calls)} 个工具调用{ui.RESET}")
+            print(f"{self.indent}{ui.DIM}[turn {turn}] {len(tool_calls)} 个工具调用{ui.RESET}")
             self._check_repeat(tool_calls)
             self._execute_calls(tool_calls)
 
-        print(f"{ui.YELLOW}  [max_turns] 达到 {self.cfg.max_turns} 轮上限，强制结束{ui.RESET}")
+        print(f"{self.indent}{ui.YELLOW}[max_turns] 达到 {self.cfg.max_turns} 轮上限，强制结束{ui.RESET}")
         return "（已达到最大轮数，任务被强制中止）"
 
     # ---------- 工具调度：本层真正的机制 ----------
@@ -114,7 +115,7 @@ class Agent:
         # 第三步：只读且 >=2 个才值得开线程池，否则串行更省
         results: dict[int, str] = {}
         if len(read_idx) >= 2:
-            print(f"{ui.CYAN}  [并行] {len(read_idx)} 个只读工具同时执行{ui.RESET}")
+            print(f"{self.indent}{ui.CYAN}[并行] {len(read_idx)} 个只读工具同时执行{ui.RESET}")
             # with 块退出时会等全部任务完成（shutdown(wait=True)），随后取 result 安全
             with ThreadPoolExecutor(max_workers=self.cfg.max_parallel_reads) as pool:
                 futures = {i: pool.submit(self._call_one, tool_calls[i], args_of[i])
@@ -145,7 +146,7 @@ class Agent:
         if self.permissions:
             decision = self.permissions.check(name, args)
             if decision == Decision.DENY:
-                print(f"{ui.RED}    [权限拒绝] {name}({arg_str}){ui.RESET}")
+                print(f"{self.indent}{ui.RED}  [权限拒绝] {name}({arg_str}){ui.RESET}")
                 return denied_observation(name, args)
             if decision == Decision.ASK:
                 ans = ui.confirm(name, args)
@@ -155,14 +156,14 @@ class Agent:
                     self.permissions.remember_allow(name, args)
 
         if spec is None:
-            print(f"{ui.RED}    -> {name}({arg_str}){ui.RESET}")
+            print(f"{self.indent}{ui.RED}  -> {name}({arg_str}){ui.RESET}")
             return f"[错误] 未知工具：{name}"
-        print(f"    -> {name}({arg_str})")
+        print(f"{self.indent}  -> {name}({arg_str})")
         try:
             result = spec.func(**args)
         except Exception as e:  # 工具内部炸了也不打断循环
             result = f"[错误] 工具执行异常：{type(e).__name__}: {e}"
-        print(f"{ui.DIM}    <- {ui.truncate_for_display(result)}{ui.RESET}")
+        print(f"{self.indent}{ui.DIM}  <- {ui.truncate_for_display(result)}{ui.RESET}")
         return result
 
     def _append_result(self, tc: dict, result: str) -> None:
@@ -189,4 +190,4 @@ class Agent:
                 "content": ("[系统提示] 检测到你连续多轮发起了完全相同的工具调用且未见效。"
                             "请换一种做法，或明确告诉用户目前遇到的困难。"),
             })
-            print(f"{ui.YELLOW}  [repeat] 连续 {self.cfg.repeat_limit} 次相同调用，已注入纠偏提示{ui.RESET}")
+            print(f"{self.indent}{ui.YELLOW}[repeat] 连续 {self.cfg.repeat_limit} 次相同调用，已注入纠偏提示{ui.RESET}")
