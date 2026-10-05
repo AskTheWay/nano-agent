@@ -174,6 +174,36 @@ document.querySelectorAll("header nav button").forEach((b) => {
   b.onclick = () => { $("chat-input").value = b.dataset.cmd; send(); };
 });
 
+/* ---------- 模型配置弹窗（热重载） ---------- */
+const cfgModal = $("cfg-modal");
+$("cfg-btn").onclick = async () => {
+  const d = await (await fetch("/api/config")).json();
+  $("cfg-url").value = d.base_url || "";
+  $("cfg-model").value = d.model || "";
+  $("cfg-key").value = "";
+  $("cfg-key").placeholder = d.api_key_masked
+    ? `当前：${d.api_key_masked}（留空保留）` : "填入 API key";
+  $("cfg-probe").textContent = "";
+  cfgModal.classList.remove("hidden");
+};
+$("cfg-cancel").onclick = () => cfgModal.classList.add("hidden");
+$("cfg-save").onclick = async () => {
+  $("cfg-probe").textContent = "保存中…";
+  const r = await fetch("/api/config", { method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      base_url: $("cfg-url").value.trim(),
+      api_key: $("cfg-key").value.trim(),
+      model: $("cfg-model").value.trim(),
+    }) });
+  const d = await r.json();
+  if (!d.ok) { $("cfg-probe").textContent = d.error; return; }
+  $("cfg-probe").textContent = d.probe;
+  // session_start 事件会自动更新 header；2 秒后收起
+  setTimeout(() => cfgModal.classList.add("hidden"), 2000);
+  chatMsg("sys", `[配置已热重载] 模型切换为 ${d.model}，会话已清零`);
+};
+
 /* ---------- WebSocket 事件路由 ---------- */
 function route(ev) {
   switch (ev.type) {

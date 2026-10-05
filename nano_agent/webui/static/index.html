@@ -14,8 +14,24 @@
     <button data-cmd="/permissions">/permissions</button>
     <button data-cmd="/compact">/compact</button>
     <button data-cmd="/clear">/clear</button>
+    <button id="cfg-btn">⚙ 模型配置</button>
   </nav>
 </header>
+
+<!-- 模型配置弹窗（热重载：保存即销毁重建 Agent） -->
+<div id="cfg-modal" class="hidden">
+  <div class="cfg-card">
+    <h3>模型配置 <small>保存后热重载（会话清零）</small></h3>
+    <label>OPENAI_BASE_URL<input id="cfg-url" placeholder="https://open.bigmodel.cn/api/paas/v4"></label>
+    <label>OPENAI_API_KEY<input id="cfg-key" type="password" placeholder="留空 = 保留当前值"></label>
+    <label>MODEL_NAME<input id="cfg-model" placeholder="glm-4-flash"></label>
+    <div class="cfg-actions">
+      <span id="cfg-probe"></span>
+      <button id="cfg-cancel">取消</button>
+      <button id="cfg-save">保存并重载</button>
+    </div>
+  </div>
+</div>
 
 <main>
   <!-- ① 对话流 -->

@@ -87,6 +87,77 @@ def _get_agent() -> Agent:
         return _agent
 
 
+# ========== 模型配置：前端可改 + 热重载 ==========
+
+def _mask(key: str) -> str:
+    """key 打码显示：只露尾 4 位。"""
+    return (key[:6] + "…" + key[-4:]) if len(key) > 12 else "…"
+
+
+def _update_env_file(base_url: str, api_key: str, model: str) -> None:
+    """把三个变量写回 .env（保留其余行）。.env 已在 .gitignore。"""
+    path = os.path.join(os.getcwd(), ".env")
+    lines = []
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    values = {"OPENAI_BASE_URL": base_url, "OPENAI_API_KEY": api_key,
+              "MODEL_NAME": model}
+    seen = set()
+    out = []
+    for ln in lines:
+        k = ln.split("=")[0].strip() if "=" in ln and not ln.strip().startswith("#") else None
+        if k in values:
+            out.append(f"{k}={values[k]}")
+            seen.add(k)
+        else:
+            out.append(ln)
+    for k, v in values.items():  # 原文件缺的变量追加
+        if k not in seen:
+            out.append(f"{k}={v}")
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(out) + "\n")
+
+
+@app.get("/api/config")
+async def get_config():
+    from ..config import AppConfig
+    c = AppConfig()
+    return {"base_url": c.base_url, "api_key_masked": _mask(c.api_key),
+            "model": c.model}
+
+
+@app.post("/api/config")
+async def set_config(body: dict):
+    """热重载：写 .env -> 销毁重建 Agent（新会话）-> 探活验证。"""
+    global _agent
+    from ..config import AppConfig
+    cur = AppConfig()
+    base_url = (body.get("base_url") or "").strip() or cur.base_url
+    api_key = (body.get("api_key") or "").strip() or cur.api_key  # 留空 = 保留旧值
+    model = (body.get("model") or "").strip() or cur.model
+    _update_env_file(base_url, api_key, model)
+    # 环境变量优先级高于 .env（load_dotenv 不覆盖），必须同步覆盖进程环境
+    os.environ["OPENAI_BASE_URL"] = base_url
+    os.environ["OPENAI_API_KEY"] = api_key
+    os.environ["MODEL_NAME"] = model
+    # 销毁重建（对话历史清零——模型都换了，旧上下文没有意义）
+    with _agent_lock:
+        _agent = None
+    try:
+        agent = _get_agent()  # 立即重建并广播 session_start
+    except SystemExit:
+        return {"ok": False, "error": "配置不完整（BASE_URL/KEY/MODEL 都要有）"}
+    # 探活：一个 1-token 请求验证新配置真能用（失败也保留配置，只是告诉你）
+    probe = ""
+    try:
+        m, _ = agent.llm.chat([{"role": "user", "content": "hi"}])
+        probe = f"连通正常（{model} 已应答）"
+    except Exception as e:
+        probe = f"配置已保存，但探活失败：{str(e)[:150]}（对话时可能报错）"
+    return {"ok": True, "model": model, "probe": probe}
+
+
 # ========== 事件泵：bus(任意线程) -> queue -> WebSocket(async) ==========
 
 _bus.subscribe("*", lambda t, p: _event_q.put((t, p)))
