@@ -69,23 +69,39 @@ function updateStats() {
   $("s-compact").textContent = stats.compacts;
 }
 
-/* ---------- ④ 调度时间线 ---------- */
-let currentTurnDiv = null, currentGrp = null;
+/* ---------- ④ 调度时间线（只画主线；子代理的轮次归⑥） ---------- */
+let currentTurnDiv = null, currentGrp = null, taskNo = 0;
+
+// 从参数里挑最有信息量的一个显示（command/path/pattern/...），比整坨 JSON 直观
+function pickArg(args) {
+  if (!args) return "";
+  for (const k of ["command", "path", "pattern", "description", "old_str"]) {
+    if (args[k] != null) return `${k}=${String(args[k]).slice(0, 60)}`;
+  }
+  return JSON.stringify(args).slice(0, 60);
+}
+
 function renderSchedule(ev) {
-  if (!currentTurnDiv) return;   // 子代理的调度渲染进子代理面板更清晰，这里只画主线
+  if (!currentTurnDiv || ev.source === "sub") return;
   const mk = (grpCls, title, calls) => {
     const grp = addDiv("sched-flow", `grp ${grpCls}`,
       `<div class="grp-title"><b>${title}</b> ${calls.length} 个</div>`);
     calls.forEach((c) => {
       grp.insertAdjacentHTML("beforeend",
         `<div class="call-row"><span class="badge ask" data-pending="1">…</span>` +
-        `<b>${esc(c.name)}</b><span class="call-args">${esc(JSON.stringify(c.args).slice(0, 80))}</span></div>`);
+        `<b>${esc(c.name)}</b><span class="call-args">${esc(pickArg(c.args))}</span></div>`);
     });
     return grp;
   };
-  if (ev.parallel.length) mk("parallel", "并行（只读）", ev.parallel);
-  if (ev.serial.length) mk("serial", "串行（写/需确认）", ev.serial);
+  if (ev.parallel.length) mk("parallel", "并行（只读·无副作用）", ev.parallel);
+  if (ev.serial.length) mk("serial", "串行（写操作·需逐个执行）", ev.serial);
   currentGrp = currentTurnDiv;
+}
+
+// 每条新用户消息画一条任务分隔（agent.run 从 turn 1 重新计数，需要视觉边界）
+function newTaskDivider(text) {
+  addDiv("sched-flow", "task-divider", `▶ 任务 #${++taskNo}：${esc(text.slice(0, 40))}`);
+  currentTurnDiv = null; currentGrp = null;
 }
 function renderPermission(ev) {
   // 找最近一个匹配工具名的 pending 徽章上色
@@ -101,6 +117,11 @@ function renderPermission(ev) {
   }
 }
 function renderToolResult(ev) {
+  if (ev.source === "sub") {  // 子代理的工具调用：缩进汇入⑥的 sidechain 卡
+    if (subCard) subCard.insertAdjacentHTML("beforeend",
+      `<div class="sub-turn">· ${esc(ev.name)}(${esc(pickArg(ev.args))}) ${ev.ok ? "✓" : "✗"}</div>`);
+    return;
+  }
   if (!currentGrp) return;
   currentGrp.insertAdjacentHTML("beforeend",
     `<div class="call-row"><span class="badge ${ev.ok ? "ok" : "err"}">${ev.ok ? "✓" : "✗"}</span>` +
@@ -108,7 +129,7 @@ function renderToolResult(ev) {
   // 可展开的工具卡：摘要一行，点开看完整观测（含全部参数与输出）
   addDiv("chat-flow", "msg toolcard",
     `<span class="who">工具 · ${esc(ev.name)} · 点击展开</span>` +
-    `<details><summary>${esc(ev.name)}(${esc(JSON.stringify(ev.args).slice(0, 80))})` +
+    `<details><summary>${esc(ev.name)}(${esc(pickArg(ev.args))})` +
     ` → ${esc(ev.preview.slice(0, 120))}</summary>` +
     `<pre>${esc(ev.full || ev.preview)}</pre></details>`);
 }
@@ -170,6 +191,7 @@ async function send() {
     return;
   }
   chatMsg("user", text);
+  newTaskDivider(text);
   const r = await fetch("/api/chat", { method: "POST",
     headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input: text }) });
   const d = await r.json();
@@ -223,6 +245,11 @@ function route(ev) {
       updateMeter(0);
       break;
     case "turn_start":
+      if (ev.source === "sub") {  // 子代理的轮次 -> ⑥面板的 sidechain 卡
+        if (subCard) subCard.insertAdjacentHTML("beforeend",
+          `<div class="sub-turn">— 子代理 turn ${ev.turn} —</div>`);
+        break;
+      }
       currentTurnDiv = addDiv("sched-flow", "turn-head", `— turn ${ev.turn} —`);
       currentGrp = null;
       break;

@@ -114,6 +114,8 @@ main {
   border-bottom: 1px dashed #30363d; }
 
 /* ④ 调度时间线 */
+.task-divider { color: #e3b341; font-size: 12px; margin: 10px 0 4px; padding: 4px 6px;
+  background: #2d2200; border-left: 3px solid #d29922; border-radius: 0 4px 4px 0; }
 .turn-head { color: #79c0ff; font-size: 12px; margin: 8px 0 4px; border-bottom: 1px solid #21262d; }
 .grp { margin: 3px 0; }
 .grp .grp-title { font-size: 11px; color: #8b949e; }
@@ -144,3 +146,5 @@ main {
 .sub-card .desc { color: #c9d1d9; margin: 2px 0; }
 .sub-card .done { color: #3fb950; }
 .sub-card .summary { color: #8b949e; white-space: pre-wrap; }
+.sub-card .sub-turn { color: #8b949e; font-size: 11px; padding-left: 12px;
+  border-left: 1px dashed #1f6feb55; margin-top: 2px; }

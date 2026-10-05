@@ -53,6 +53,9 @@ class Agent:
 
     def _emit(self, event_type: str, **payload) -> None:
         if self.bus:
+            # source 标记主/子代理：前端据此把子代理的轮次分流到⑥面板，
+            # 不和主线的调度时间线混流（否则出现两个 turn 1）
+            payload.setdefault("source", "sub" if self.indent else "main")
             self.bus.emit(event_type, **payload)
 
     # ---------- 主循环 ----------
