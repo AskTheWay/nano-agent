@@ -82,6 +82,9 @@ class Agent:
                            msgs=[{"role": m["role"],
                                   "preview": (m.get("content")
                                               or f"<{len(m.get('tool_calls', []))} 个工具调用>")[:80],
+                                  "full": (m.get("content") or
+                                           json.dumps(m.get("tool_calls", []),
+                                                      ensure_ascii=False))[:4000],
                                   "tokens": 4 + estimate_text(m.get("content") or "")}
                                  for m in self.messages])
             self._emit("turn_start", turn=turn)
@@ -93,7 +96,9 @@ class Agent:
 
             tool_calls = assistant.get("tool_calls", [])
             if not tool_calls:  # 唯一的"智能"终止条件
+                # 带全文：前端把完整回答渲染进对话流（preview 字段保留兼容）
                 self._emit("turn_end", turn=turn,
+                           answer=assistant["content"],
                            answer_preview=assistant["content"][:120])
                 return assistant["content"]
 
@@ -231,7 +236,7 @@ class Agent:
 
         # 观测：工具完成（面板④时间线）+ 沙箱副作用（面板⑤）
         self._emit("tool_result", name=name, args=args,
-                   preview=result[:200],
+                   preview=result[:200], full=result[:4000],
                    ok=not result.startswith(("[错误]", "[权限拒绝]")))
         if name in ("write_file", "edit_file") and not result.startswith(("[错误]", "[权限拒绝]")):
             self._emit("file_change", op=name, path=str(args.get("path", "")),

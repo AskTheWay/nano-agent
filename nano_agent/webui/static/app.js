@@ -5,6 +5,7 @@ const $ = (id) => document.getElementById(id);
 const ROLE_COLOR = { system: "#bf3989", user: "#58a6ff", assistant: "#3fb950", tool: "#d29922" };
 let session = { token_limit: 30000, rules: { allow: [], deny: [] } };
 let stats = { prompt: 0, cached: 0, compacts: 0 };
+let lastAnswer = null;  // turn_end 与 POST 响应的查重锚点
 
 /* ---------- 通用 ---------- */
 function addDiv(parentId, cls, html) {
@@ -39,11 +40,13 @@ function renderPrompt(ev) {
     el.dataset.tip = s.tip;
     stack.appendChild(el);
   });
-  ev.msgs.forEach((m) => {
+  ev.msgs.forEach((m, i) => {
     list.insertAdjacentHTML("beforeend",
-      `<div class="pl-row"><span class="dot" style="background:${ROLE_COLOR[m.role]}"></span>` +
-      `<span>${m.role}</span><span class="pv">${esc(m.preview)}</span>` +
-      `<span class="tok">${m.tokens} tok</span></div>`);
+      `<details class="pl-row"><summary>` +
+      `<span class="dot" style="background:${ROLE_COLOR[m.role]}"></span>` +
+      `<span>${m.role} #${i}</span><span class="pv">${esc(m.preview)}</span>` +
+      `<span class="tok">${m.tokens} tok ▾</span></summary>` +
+      `<pre class="pl-full">${esc(m.full || m.preview)}</pre></details>`);
   });
   // ③ 的估算同步更新
   $("s-est").textContent = ev.total;
@@ -102,7 +105,12 @@ function renderToolResult(ev) {
   currentGrp.insertAdjacentHTML("beforeend",
     `<div class="call-row"><span class="badge ${ev.ok ? "ok" : "err"}">${ev.ok ? "✓" : "✗"}</span>` +
     `<span class="call-args">${esc(ev.preview.slice(0, 100))}</span></div>`);
-  chatMsg("tool", `${ev.name}(${JSON.stringify(ev.args).slice(0, 60)}) → ${ev.preview.slice(0, 160)}`);
+  // 可展开的工具卡：摘要一行，点开看完整观测（含全部参数与输出）
+  addDiv("chat-flow", "msg toolcard",
+    `<span class="who">工具 · ${esc(ev.name)} · 点击展开</span>` +
+    `<details><summary>${esc(ev.name)}(${esc(JSON.stringify(ev.args).slice(0, 80))})` +
+    ` → ${esc(ev.preview.slice(0, 120))}</summary>` +
+    `<pre>${esc(ev.full || ev.preview)}</pre></details>`);
 }
 
 /* ---------- ⑤ 沙箱 ---------- */
@@ -166,6 +174,7 @@ async function send() {
     headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input: text }) });
   const d = await r.json();
   if (!d.ok) chatMsg("sys", `[出错] ${d.error}`);
+  else if (d.answer != null && d.answer !== lastAnswer) chatMsg("assistant", d.answer);  // ws 断线兜底
   refreshFiles();
 }
 $("send").onclick = send;
@@ -244,7 +253,10 @@ function route(ev) {
       break;
     case "subagent_spawn": renderSubSpawn(ev); break;
     case "subagent_done": renderSubDone(ev); break;
-    case "turn_end": chatMsg("assistant", ev.answer_preview + " …"); break;
+    case "turn_end":
+      lastAnswer = ev.answer != null ? ev.answer : (ev.answer_preview || "");
+      chatMsg("assistant", lastAnswer);
+      break;
     case "command_output": chatMsg("sys", ev.output); break;
   }
 }

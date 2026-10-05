@@ -81,6 +81,20 @@ main {
 .seg.tool { background: #d29922; }
 #prompt-list .pl-row { display: flex; gap: 8px; font-size: 12px; padding: 2px 0;
   border-bottom: 1px dashed #21262d; }
+/* 可展开的消息行（details）：summary 保持原布局，展开后显示全文 */
+#prompt-list details.pl-row { display: block; }
+#prompt-list details.pl-row summary { display: flex; gap: 8px; cursor: pointer;
+  list-style: none; padding: 2px 0; }
+#prompt-list details.pl-row summary::-webkit-details-marker { display: none; }
+#prompt-list .pl-full { margin: 4px 0 6px 16px; padding: 6px; font-size: 11px;
+  color: #8b949e; background: #0d1117; border: 1px solid #21262d; border-radius: 4px;
+  white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto; }
+/* 对话流里可展开的工具卡 */
+.msg.toolcard details summary { cursor: pointer; list-style: none; color: #d29922; }
+.msg.toolcard details summary::-webkit-details-marker { display: none; }
+.msg.toolcard details pre { margin-top: 6px; padding: 6px; font-size: 11px;
+  color: #8b949e; background: #0d1117; border: 1px solid #21262d; border-radius: 4px;
+  white-space: pre-wrap; word-break: break-all; max-height: 320px; overflow-y: auto; }
 .pl-row .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex: none; }
 .pl-row .tok { color: #8b949e; margin-left: auto; flex: none; }
 .pl-row .pv { color: #8b949e; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 55%; }
