@@ -65,6 +65,17 @@ python -m nano_agent
 
 换个端点只是换个 `OPENAI_BASE_URL`（各端点实测差异见 docs/06）。
 
+**WebUI 观测台**（可选，学习向的可视化面板）：
+
+```bash
+pip install fastapi uvicorn
+python -m nano_agent.webui     # 打开 http://127.0.0.1:8765
+```
+
+六个面板实时展示每轮 prompt 的组装（system+schema+消息的 token 堆叠条）、
+调度分组与权限判定、上下文仪表盘、沙箱文件副作用、子代理 sidechain——
+详见 [docs/07-webui.md](docs/07-webui.md)。
+
 测试（全部不触网，改代码后先跑它）：
 
 ```bash

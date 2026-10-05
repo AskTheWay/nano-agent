@@ -1,0 +1,227 @@
+/* nano-agent 观测台前端：WebSocket 事件流 -> 六面板渲染。零依赖。 */
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const ROLE_COLOR = { system: "#bf3989", user: "#58a6ff", assistant: "#3fb950", tool: "#d29922" };
+let session = { token_limit: 30000, rules: { allow: [], deny: [] } };
+let stats = { prompt: 0, cached: 0, compacts: 0 };
+
+/* ---------- 通用 ---------- */
+function addDiv(parentId, cls, html) {
+  const el = document.createElement("div");
+  el.className = cls; el.innerHTML = html;
+  const parent = $(parentId); parent.appendChild(el);
+  parent.scrollTop = parent.scrollHeight;
+  return el;
+}
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+/* ---------- ① 对话流 ---------- */
+function chatMsg(role, text) {
+  const who = { user: "你", assistant: "nano-agent", tool: "工具", sys: "系统" }[role] || role;
+  addDiv("chat-flow", `msg ${role}`, `<span class="who">${who}</span>${esc(text)}`);
+}
+
+/* ---------- ② Prompt 组装 ---------- */
+function renderPrompt(ev) {
+  const stack = $("prompt-stack"); stack.innerHTML = "";
+  const list = $("prompt-list"); list.innerHTML = "";
+  const total = ev.total || 1;
+  $("prompt-total").textContent = `≈ ${ev.total} tokens`;
+
+  const segs = [{ cls: "schema", tip: `工具定义 schema ≈ ${ev.schema_tokens} tok`, w: ev.schema_tokens }]
+    .concat(ev.msgs.map((m) => ({ cls: m.role, tip: `${m.role} ≈ ${m.tokens} tok`, w: m.tokens })));
+  segs.forEach((s) => {
+    const el = document.createElement("div");
+    el.className = `seg ${s.cls}`;
+    el.style.width = Math.max(0.5, (s.w / total) * 100) + "%";
+    el.dataset.tip = s.tip;
+    stack.appendChild(el);
+  });
+  ev.msgs.forEach((m) => {
+    list.insertAdjacentHTML("beforeend",
+      `<div class="pl-row"><span class="dot" style="background:${ROLE_COLOR[m.role]}"></span>` +
+      `<span>${m.role}</span><span class="pv">${esc(m.preview)}</span>` +
+      `<span class="tok">${m.tokens} tok</span></div>`);
+  });
+  // ③ 的估算同步更新
+  $("s-est").textContent = ev.total;
+  updateMeter(ev.total);
+}
+
+/* ---------- ③ 上下文仪表盘 ---------- */
+function updateMeter(total) {
+  const pct = Math.min(100, (total / session.token_limit) * 100);
+  const fill = $("ctx-fill");
+  fill.style.width = pct + "%";
+  fill.className = "meter-fill" + (pct >= 80 ? " over" : "");
+  $("ctx-label").textContent =
+    `${total} / ${session.token_limit}（${pct.toFixed(0)}%，黄线=80% 压缩阈值）`;
+}
+function updateStats() {
+  $("s-prompt").textContent = stats.prompt;
+  const rate = stats.prompt ? (stats.cached / stats.prompt * 100).toFixed(1) + "%" : "—";
+  $("s-cached").textContent = `${stats.cached} (${rate})`;
+  $("s-compact").textContent = stats.compacts;
+}
+
+/* ---------- ④ 调度时间线 ---------- */
+let currentTurnDiv = null, currentGrp = null;
+function renderSchedule(ev) {
+  if (!currentTurnDiv) return;   // 子代理的调度渲染进子代理面板更清晰，这里只画主线
+  const mk = (grpCls, title, calls) => {
+    const grp = addDiv("sched-flow", `grp ${grpCls}`,
+      `<div class="grp-title"><b>${title}</b> ${calls.length} 个</div>`);
+    calls.forEach((c) => {
+      grp.insertAdjacentHTML("beforeend",
+        `<div class="call-row"><span class="badge ask" data-pending="1">…</span>` +
+        `<b>${esc(c.name)}</b><span class="call-args">${esc(JSON.stringify(c.args).slice(0, 80))}</span></div>`);
+    });
+    return grp;
+  };
+  if (ev.parallel.length) mk("parallel", "并行（只读）", ev.parallel);
+  if (ev.serial.length) mk("serial", "串行（写/需确认）", ev.serial);
+  currentGrp = currentTurnDiv;
+}
+function renderPermission(ev) {
+  // 找最近一个匹配工具名的 pending 徽章上色
+  const rows = document.querySelectorAll("#sched-flow .call-row");
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const badge = rows[i].querySelector(".badge");
+    if (badge && rows[i].querySelector("b").textContent === ev.tool && badge.dataset.pending) {
+      badge.dataset.pending = "";
+      badge.className = `badge ${ev.decision}`;
+      badge.textContent = ev.decision + (ev.answered ? `→${ev.answered}` : "");
+      break;
+    }
+  }
+}
+function renderToolResult(ev) {
+  if (!currentGrp) return;
+  currentGrp.insertAdjacentHTML("beforeend",
+    `<div class="call-row"><span class="badge ${ev.ok ? "ok" : "err"}">${ev.ok ? "✓" : "✗"}</span>` +
+    `<span class="call-args">${esc(ev.preview.slice(0, 100))}</span></div>`);
+  chatMsg("tool", `${ev.name}(${JSON.stringify(ev.args).slice(0, 60)}) → ${ev.preview.slice(0, 160)}`);
+}
+
+/* ---------- ⑤ 沙箱 ---------- */
+async function refreshFiles() {
+  const r = await fetch("/api/sandbox"); const data = await r.json();
+  const tree = $("file-tree"); tree.innerHTML = "";
+  (data.files || []).forEach((f) => {
+    tree.insertAdjacentHTML("beforeend",
+      `<div class="file"><b>文件</b> <span class="fp">${esc(f.path)}</span> (${f.size}B)` +
+      `<pre>${esc(f.preview)}</pre></div>`);
+  });
+  if (!data.files.length) tree.innerHTML = `<div class="ev" style="color:#8b949e">sandbox/ 为空——让 agent 创建点什么</div>`;
+}
+
+/* ---------- ⑥ 子代理 ---------- */
+let subCard = null;
+function renderSubSpawn(ev) {
+  subCard = addDiv("sub-flow", "sub-card",
+    `<div class="spawn">↳ 派生子代理 ${esc(ev.sa_type)}</div>` +
+    `<div class="desc">${esc(ev.description)}</div>` +
+    `<div style="color:#8b949e">（内部事件实时汇入①④面板）</div>`);
+}
+function renderSubDone(ev) {
+  if (!subCard) return;
+  subCard.insertAdjacentHTML("beforeend",
+    `<div class="done">✓ 完成：${ev.n_tools} 次工具调用 | 子上下文 ≈ ${ev.tokens} tok（已丢弃）</div>` +
+    `<div class="summary">${esc(ev.summary)}</div>`);
+  subCard = null;
+}
+
+/* ---------- 权限确认条 ---------- */
+function showConfirm(ev) {
+  $("confirm-text").textContent = `[权限确认] ${ev.tool}(${JSON.stringify(ev.args)})`;
+  $("confirm-bar").classList.remove("hidden");
+  $("confirm-bar").dataset.cid = ev.id;
+}
+document.querySelectorAll("#confirm-bar button").forEach((b) => {
+  b.onclick = async () => {
+    await fetch("/api/confirm", { method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: $("confirm-bar").dataset.cid, answer: b.dataset.ans }) });
+    $("confirm-bar").classList.add("hidden");
+  };
+});
+
+/* ---------- 发送 ---------- */
+async function send() {
+  const input = $("chat-input"); const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  if (text.startsWith("/")) {
+    const r = await fetch("/api/command", { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cmd: text }) });
+    const d = await r.json();
+    chatMsg("sys", d.ok ? d.output : d.error);
+    refreshFiles();
+    return;
+  }
+  chatMsg("user", text);
+  const r = await fetch("/api/chat", { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input: text }) });
+  const d = await r.json();
+  if (!d.ok) chatMsg("sys", `[出错] ${d.error}`);
+  refreshFiles();
+}
+$("send").onclick = send;
+$("chat-input").addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+document.querySelectorAll("header nav button").forEach((b) => {
+  b.onclick = () => { $("chat-input").value = b.dataset.cmd; send(); };
+});
+
+/* ---------- WebSocket 事件路由 ---------- */
+function route(ev) {
+  switch (ev.type) {
+    case "session_start":
+      session.token_limit = ev.token_limit; session.rules = ev.rules;
+      $("session-info").textContent =
+        `模型 ${ev.model} | 工具 ${ev.tools.length} 个 | 预算 ${ev.token_limit}`;
+      updateMeter(0);
+      break;
+    case "turn_start":
+      currentTurnDiv = addDiv("sched-flow", "turn-head", `— turn ${ev.turn} —`);
+      currentGrp = null;
+      break;
+    case "prompt_assembly": renderPrompt(ev); break;
+    case "llm_response":
+      stats.prompt += ev.usage.prompt; stats.cached += ev.usage.cached;
+      updateStats();
+      if (ev.tool_calls.length) {
+        chatMsg("sys", `模型请求调用 ${ev.tool_calls.length} 个工具：` +
+          ev.tool_calls.map((c) => `${c.name}(${c.args.slice(0, 50)})`).join("，"));
+      }
+      break;
+    case "schedule": renderSchedule(ev); break;
+    case "permission": renderPermission(ev); break;
+    case "permission_ask": showConfirm(ev); break;
+    case "tool_result": renderToolResult(ev); break;
+    case "file_change":
+      addDiv("sandbox-events", "ev", `<b>${ev.op}</b> ${esc(ev.path)}`);
+      refreshFiles();
+      break;
+    case "bash_exec":
+      addDiv("sandbox-events", "ev", `<b>bash</b> ${esc(ev.command)} <span class="out">${esc(ev.exit_line)}</span>`);
+      break;
+    case "compact":
+      stats.compacts++; updateStats();
+      addDiv("compact-log", "compact-mark",
+        `⇩ 压缩：丢弃 ${ev.dropped} 条，${ev.before} → ${ev.after} tok`);
+      break;
+    case "subagent_spawn": renderSubSpawn(ev); break;
+    case "subagent_done": renderSubDone(ev); break;
+    case "turn_end": chatMsg("assistant", ev.answer_preview + " …"); break;
+    case "command_output": chatMsg("sys", ev.output); break;
+  }
+}
+
+function connect() {
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onmessage = (e) => route(JSON.parse(e.data));
+  ws.onclose = () => setTimeout(connect, 1500);  // 断线重连
+}
+connect(); refreshFiles(); updateStats();

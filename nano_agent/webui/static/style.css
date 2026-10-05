@@ -1,0 +1,117 @@
+/* nano-agent 观测台 —— 深色主题，无任何前端依赖 */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font: 13px/1.5 "Cascadia Code", Consolas, "Microsoft YaHei", monospace;
+  background: #0d1117; color: #c9d1d9; height: 100vh; display: flex; flex-direction: column;
+}
+header {
+  display: flex; align-items: center; gap: 16px; padding: 8px 16px;
+  background: #161b22; border-bottom: 1px solid #30363d;
+}
+header h1 { font-size: 16px; color: #58a6ff; }
+header h1 span { color: #8b949e; font-weight: normal; }
+#session-info { color: #8b949e; flex: 1; }
+header nav { display: flex; gap: 6px; }
+header button, .input-row button, #confirm-bar button {
+  background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
+  border-radius: 4px; padding: 3px 10px; cursor: pointer; font: inherit;
+}
+header button:hover { border-color: #58a6ff; }
+
+main {
+  flex: 1; display: grid; gap: 10px; padding: 10px; min-height: 0;
+  grid-template-columns: 1.1fr 1.2fr 0.9fr;
+  grid-template-rows: 1.2fr 1fr;
+}
+.panel { background: #161b22; border: 1px solid #30363d; border-radius: 6px;
+  display: flex; flex-direction: column; min-height: 0; }
+.panel h2 {
+  font-size: 12px; color: #79c0ff; padding: 6px 10px; border-bottom: 1px solid #21262d;
+}
+.panel h2 small { color: #8b949e; font-weight: normal; }
+.body { padding: 8px 10px; flex: 1; min-height: 0; }
+.scroll { overflow-y: auto; }
+
+/* ① 对话流 */
+.msg { margin-bottom: 8px; padding: 6px 8px; border-radius: 4px; white-space: pre-wrap; word-break: break-all; }
+.msg.user { background: #1c2a3a; border-left: 3px solid #58a6ff; }
+.msg.assistant { background: #12261b; border-left: 3px solid #3fb950; }
+.msg.toolcard { background: #21262d; border-left: 3px solid #d29922; font-size: 12px; color: #8b949e; }
+.msg.sys { background: #21262d; color: #8b949e; font-size: 12px; border-left: 3px solid #8b949e; }
+.msg .who { font-weight: bold; font-size: 11px; display: block; margin-bottom: 2px; }
+.msg.user .who { color: #58a6ff; } .msg.assistant .who { color: #3fb950; }
+.msg.toolcard .who { color: #d29922; }
+.input-row { display: flex; gap: 6px; padding: 8px 10px; border-top: 1px solid #21262d; }
+.input-row input {
+  flex: 1; background: #0d1117; color: #c9d1d9; border: 1px solid #30363d;
+  border-radius: 4px; padding: 6px 8px; font: inherit;
+}
+#confirm-bar { display: flex; gap: 6px; align-items: center; padding: 8px 10px;
+  background: #2d2200; border-top: 1px solid #d29922; }
+#confirm-bar span { flex: 1; color: #e3b341; font-size: 12px; }
+#confirm-bar .yes { border-color: #3fb950; } #confirm-bar .no { border-color: #f85149; }
+.hidden { display: none !important; }
+
+/* ② Prompt 组装堆叠条 */
+.stack { display: flex; height: 26px; border-radius: 4px; overflow: hidden;
+  border: 1px solid #30363d; margin-bottom: 8px; }
+.seg { position: relative; min-width: 2px; }
+.seg:hover::after {
+  content: attr(data-tip); position: absolute; bottom: 110%; left: 0;
+  background: #000; color: #c9d1d9; padding: 3px 8px; border-radius: 4px;
+  white-space: nowrap; z-index: 5; border: 1px solid #30363d;
+}
+.seg.schema { background: #8957e5; } .seg.system { background: #bf3989; }
+.seg.user { background: #58a6ff; } .seg.assistant { background: #3fb950; }
+.seg.tool { background: #d29922; }
+#prompt-list .pl-row { display: flex; gap: 8px; font-size: 12px; padding: 2px 0;
+  border-bottom: 1px dashed #21262d; }
+.pl-row .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex: none; }
+.pl-row .tok { color: #8b949e; margin-left: auto; flex: none; }
+.pl-row .pv { color: #8b949e; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 55%; }
+
+/* ③ 上下文仪表盘 */
+.meter { position: relative; height: 20px; background: #0d1117; border: 1px solid #30363d;
+  border-radius: 4px; margin: 4px 0 10px; }
+.meter-fill { height: 100%; background: linear-gradient(90deg,#1f6feb,#58a6ff);
+  border-radius: 3px 0 0 3px; width: 0; transition: width .4s; }
+.meter-fill.over { background: linear-gradient(90deg,#b62324,#f85149); }
+.meter-threshold { position: absolute; left: 80%; top: -3px; bottom: -3px;
+  width: 2px; background: #d29922; }
+.meter-label { position: absolute; right: 6px; top: 2px; font-size: 11px; color: #8b949e; }
+#ctx-stats { display: grid; grid-template-columns: auto auto; gap: 2px 12px; font-size: 12px; }
+#ctx-stats dt { color: #8b949e; } #ctx-stats dd { color: #c9d1d9; text-align: right; }
+#compact-log .compact-mark { color: #e3b341; font-size: 12px; padding: 3px 0;
+  border-bottom: 1px dashed #30363d; }
+
+/* ④ 调度时间线 */
+.turn-head { color: #79c0ff; font-size: 12px; margin: 8px 0 4px; border-bottom: 1px solid #21262d; }
+.grp { margin: 3px 0; }
+.grp .grp-title { font-size: 11px; color: #8b949e; }
+.grp.parallel .grp-title b { color: #3fb950; }
+.grp.serial .grp-title b { color: #d29922; }
+.call-row { display: flex; gap: 6px; align-items: center; padding: 2px 0 2px 12px; font-size: 12px; }
+.badge { flex: none; font-size: 10px; border-radius: 3px; padding: 0 5px; border: 1px solid; }
+.badge.allow { color: #3fb950; border-color: #3fb950; }
+.badge.deny { color: #f85149; border-color: #f85149; }
+.badge.ask { color: #d29922; border-color: #d29922; }
+.badge.ok { color: #3fb950; border-color: #3fb95055; }
+.badge.err { color: #f85149; border-color: #f8514955; }
+.call-args { color: #8b949e; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ⑤ 沙箱 */
+#file-tree .file { padding: 2px 0; font-size: 12px; border-bottom: 1px dashed #21262d; }
+#file-tree .file b { color: #d29922; }
+#file-tree .file .fp { color: #c9d1d9; }
+#file-tree .file pre { color: #8b949e; margin: 2px 0 0 12px; font-size: 11px;
+  white-space: pre-wrap; max-height: 60px; overflow: hidden; }
+#sandbox-events .ev { font-size: 12px; padding: 2px 0; border-bottom: 1px dashed #21262d; }
+#sandbox-events .ev b { color: #58a6ff; } #sandbox-events .ev .out { color: #8b949e; }
+
+/* ⑥ 子代理 */
+.sub-card { background: #0d1117; border: 1px solid #1f6feb55; border-radius: 4px;
+  padding: 6px 8px; margin-bottom: 6px; font-size: 12px; }
+.sub-card .spawn { color: #79c0ff; }
+.sub-card .desc { color: #c9d1d9; margin: 2px 0; }
+.sub-card .done { color: #3fb950; }
+.sub-card .summary { color: #8b949e; white-space: pre-wrap; }

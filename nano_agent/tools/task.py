@@ -11,7 +11,7 @@ from typing import Annotated
 from .registry import tool
 
 
-def install(llm, permissions) -> None:
+def install(llm, permissions, bus=None) -> None:
     """main 组装时调用一次：注册携带依赖闭包的 task 工具。
 
     子代理类型的参数描述从 SUBAGENT_TYPES 动态生成——往类型表加条目
@@ -30,4 +30,4 @@ def install(llm, permissions) -> None:
         """
         from ..subagent import run_task
         from . import REGISTRY
-        return run_task(llm, REGISTRY, permissions, description, agent_type)
+        return run_task(llm, REGISTRY, permissions, description, agent_type, bus=bus)

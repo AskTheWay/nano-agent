@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>nano-agent 观测台</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>nano-agent <span>观测台</span></h1>
+  <div id="session-info">连接中…</div>
+  <nav>
+    <button data-cmd="/tokens">/tokens</button>
+    <button data-cmd="/permissions">/permissions</button>
+    <button data-cmd="/compact">/compact</button>
+    <button data-cmd="/clear">/clear</button>
+  </nav>
+</header>
+
+<main>
+  <!-- ① 对话流 -->
+  <section class="panel" id="p-chat">
+    <h2>① 对话流</h2>
+    <div class="body scroll" id="chat-flow"></div>
+    <div class="input-row">
+      <input id="chat-input" placeholder="输入任务，回车发送…">
+      <button id="send">发送</button>
+    </div>
+    <div id="confirm-bar" class="hidden">
+      <span id="confirm-text"></span>
+      <button class="yes" data-ans="y">允许</button>
+      <button class="no" data-ans="n">拒绝</button>
+      <button class="always" data-ans="a">本会话总允许</button>
+    </div>
+  </section>
+
+  <!-- ② Prompt 组装 -->
+  <section class="panel" id="p-prompt">
+    <h2>② 本轮 Prompt 组装 <small id="prompt-total"></small></h2>
+    <div class="body scroll">
+      <div id="prompt-stack" class="stack"></div>
+      <div id="prompt-list"></div>
+    </div>
+  </section>
+
+  <!-- ③ 上下文仪表盘 -->
+  <section class="panel" id="p-context">
+    <h2>③ 上下文</h2>
+    <div class="body">
+      <div class="meter">
+        <div class="meter-fill" id="ctx-fill"></div>
+        <div class="meter-threshold"></div>
+        <span class="meter-label" id="ctx-label">—</span>
+      </div>
+      <dl id="ctx-stats">
+        <dt>API 累计 prompt</dt><dd id="s-prompt">0</dd>
+        <dt>缓存命中</dt><dd id="s-cached">0 (—)</dd>
+        <dt>压缩次数</dt><dd id="s-compact">0</dd>
+        <dt>当前估算</dt><dd id="s-est">—</dd>
+      </dl>
+      <div id="compact-log"></div>
+    </div>
+  </section>
+
+  <!-- ④ 调度时间线 -->
+  <section class="panel" id="p-sched">
+    <h2>④ 调度时间线 <small>只读并行 / 写串行 / 权限三色</small></h2>
+    <div class="body scroll" id="sched-flow"></div>
+  </section>
+
+  <!-- ⑤ 沙箱 -->
+  <section class="panel" id="p-sandbox">
+    <h2>⑤ 沙箱 <small>文件副作用 / 命令执行</small></h2>
+    <div class="body scroll">
+      <div id="file-tree"></div>
+      <div id="sandbox-events"></div>
+    </div>
+  </section>
+
+  <!-- ⑥ 子代理 -->
+  <section class="panel" id="p-sub">
+    <h2>⑥ 子代理 <small>sidechain</small></h2>
+    <div class="body scroll" id="sub-flow"></div>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

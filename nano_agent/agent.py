@@ -32,18 +32,28 @@ class Agent:
 
     def __init__(self, llm: LLMClient, tools: ToolRegistry,
                  system_prompt: str, loop_cfg: LoopConfig | None = None,
-                 context=None, permissions=None, indent: str = "") -> None:
-        # context / permissions 是 M3/M4 的注入位，M2 阶段保持 None
+                 context=None, permissions=None, indent: str = "",
+                 bus=None) -> None:
+        # context / permissions / bus 都是注入位：M3 上下文、M4 权限、观测层。
+        # bus=None（终端 REPL）时埋点零开销；WebUI 注入 EventBus 实时推送。
         self.llm = llm
         self.tools = tools
         self.cfg = loop_cfg or LoopConfig()
         self.indent = indent  # M5：子代理的输出缩进（sidechain 可见性）
         self.context = context
         self.permissions = permissions
+        self.bus = bus
+        self._schema_tokens: int | None = None  # 工具定义的 token 缓存（观测用）
         self.messages: list[dict] = [{"role": "system", "content": system_prompt}]
         # 重复调用检测的状态
         self._last_sig: tuple | None = None
         self._sig_repeat = 0
+
+    # ---------- 观测：集中一个小方法，埋点处一行搞定 ----------
+
+    def _emit(self, event_type: str, **payload) -> None:
+        if self.bus:
+            self.bus.emit(event_type, **payload)
 
     # ---------- 主循环 ----------
 
@@ -56,6 +66,26 @@ class Agent:
             if self.context:
                 self.context.maybe_compact()
 
+            # 观测：本轮 prompt 的完整组装（WebUI 面板②的数据源）——
+            # 每条消息一条 {role, preview, tokens}，外加工具定义的占比
+            if self.bus:
+                from .context import estimate_text
+                if self._schema_tokens is None:
+                    import json as _json
+                    self._schema_tokens = estimate_text(
+                        _json.dumps(self.tools.schema(), ensure_ascii=False))
+                self._emit("prompt_assembly",
+                           schema_tokens=self._schema_tokens,
+                           total=self._schema_tokens + sum(
+                               4 + estimate_text(m.get("content") or "")
+                               for m in self.messages),
+                           msgs=[{"role": m["role"],
+                                  "preview": (m.get("content")
+                                              or f"<{len(m.get('tool_calls', []))} 个工具调用>")[:80],
+                                  "tokens": 4 + estimate_text(m.get("content") or "")}
+                                 for m in self.messages])
+            self._emit("turn_start", turn=turn)
+
             assistant, usage = self.llm.chat(self.messages, self.tools.schema())
             self.messages.append(assistant)
             if self.context:  # M3 钩子：记录真实用量（估算 vs 实际对比）
@@ -63,9 +93,23 @@ class Agent:
 
             tool_calls = assistant.get("tool_calls", [])
             if not tool_calls:  # 唯一的"智能"终止条件
+                self._emit("turn_end", turn=turn,
+                           answer_preview=assistant["content"][:120])
                 return assistant["content"]
 
             print(f"{self.indent}{ui.DIM}[turn {turn}] {len(tool_calls)} 个工具调用{ui.RESET}")
+            # 观测：模型响应（工具调用意图 + 用量）——注意包在 if 里：
+            # 实参在调用前求值，bus=None 时不该为构造 payload 付出代价/踩 None
+            if self.bus:
+                u = usage or Usage()
+                self._emit("llm_response",
+                           text_preview=(assistant["content"] or "")[:100],
+                           tool_calls=[{"id": tc["id"], "name": tc["function"]["name"],
+                                        "args": (tc["function"].get("arguments") or "")[:120]}
+                                       for tc in tool_calls],
+                           usage={"prompt": u.prompt_tokens,
+                                  "completion": u.completion_tokens,
+                                  "cached": u.cached_tokens})
             self._execute_calls(tool_calls)
             # 重复检测放在回填【之后】：纠偏的 user 消息如果插在
             # assistant(tool_calls) 和 tool 消息中间，会破坏协议配对顺序 -> 400
@@ -113,6 +157,12 @@ class Agent:
                     write_idx.append(i)  # 写工具 / 未知工具 / 需要确认的 -> 串行
                 else:
                     read_idx.append(i)   # 只读且无需交互 -> 并行安全
+            # 观测：调度分组结果（面板④：谁并行、谁串行、为什么）
+            self._emit("schedule",
+                       parallel=[{"name": tool_calls[i]["function"]["name"],
+                                  "args": args_of[i]} for i in read_idx],
+                       serial=[{"name": tool_calls[i]["function"]["name"],
+                                "args": args_of[i]} for i in write_idx])
 
             # 第三步：只读且 >=2 个才值得开线程池，否则串行更省
             if len(read_idx) >= 2:
@@ -150,15 +200,24 @@ class Agent:
         # M4：执行前的权限闸门（分组阶段已保证 ASK 只出现在串行路径）
         if self.permissions:
             decision = self.permissions.check(name, args)
+            answered = None
             if decision == Decision.DENY:
                 print(f"{self.indent}{ui.RED}  [权限拒绝] {name}({arg_str}){ui.RESET}")
+                self._emit("permission", tool=name, args=args,
+                           decision="deny", answered=None)
                 return denied_observation(name, args)
             if decision == Decision.ASK:
                 ans = ui.confirm(name, args)
+                answered = ans
+                self._emit("permission", tool=name, args=args,
+                           decision="ask", answered=ans)
                 if ans == "n":
                     return denied_observation(name, args)
                 if ans == "a":
                     self.permissions.remember_allow(name, args)
+            else:
+                self._emit("permission", tool=name, args=args,
+                           decision="allow", answered=None)
 
         if spec is None:
             print(f"{self.indent}{ui.RED}  -> {name}({arg_str}){ui.RESET}")
@@ -169,6 +228,18 @@ class Agent:
         except Exception as e:  # 工具内部炸了也不打断循环
             result = f"[错误] 工具执行异常：{type(e).__name__}: {e}"
         print(f"{self.indent}{ui.DIM}  <- {ui.truncate_for_display(result)}{ui.RESET}")
+
+        # 观测：工具完成（面板④时间线）+ 沙箱副作用（面板⑤）
+        self._emit("tool_result", name=name, args=args,
+                   preview=result[:200],
+                   ok=not result.startswith(("[错误]", "[权限拒绝]")))
+        if name in ("write_file", "edit_file") and not result.startswith(("[错误]", "[权限拒绝]")):
+            self._emit("file_change", op=name, path=str(args.get("path", "")),
+                       preview=result[:100])
+        elif name == "bash":
+            self._emit("bash_exec", command=str(args.get("command", ""))[:120],
+                       exit_line=result.splitlines()[0] if result else "",
+                       preview=result[:200])
         return result
 
     def _append_result(self, tc: dict, result: str) -> None:

@@ -69,10 +69,12 @@ def find_safe_boundary(messages: list[dict], keep_recent: int = 6) -> int:
 class ContextManager:
     """与 Agent 共享同一个 messages list 引用（压缩时原地替换）。"""
 
-    def __init__(self, messages: list[dict], llm: LLMClient, token_limit: int) -> None:
+    def __init__(self, messages: list[dict], llm: LLMClient, token_limit: int,
+                 bus=None) -> None:
         self.messages = messages
         self.llm = llm
         self.token_limit = token_limit
+        self.bus = bus  # 观测注入位（同 Agent 的 bus，WebUI 模式才装）
         # 工具定义也是上下文！每次请求 tools schema 都随消息一起发送，
         # 占比可观（官方 agent-loop 文档的 "What consumes context" 表把
         # system prompt / 工具定义 / 历史分列——这里同样计入，否则估算严重偏低）
@@ -163,6 +165,9 @@ class ContextManager:
         msg = (f"[compact] 压缩 {len(dropped)} 条历史 -> 摘要 1 条 | "
                f"估算 {before} -> {after} tokens")
         print(f"{ui.YELLOW}  {msg}{ui.RESET}")
+        if self.bus:  # 观测：压缩事件（面板③的触发标记）
+            self.bus.emit("compact", before=before, after=after,
+                          dropped=len(dropped), summary=summary[:120])
         return msg
 
     def _llm_summarize(self, script: str) -> str:
