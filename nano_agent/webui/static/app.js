@@ -293,4 +293,75 @@ function connect() {
   ws.onmessage = (e) => route(JSON.parse(e.data));
   ws.onclose = () => setTimeout(connect, 1500);  // 断线重连
 }
+/* ---------- 面板拖拽调大小（VS Code 分隔条风格） ----------
+   列宽/行高由 CSS 变量驱动（--c1/--c2/--r1），首次拖动时 px 化，
+   双击分隔条重置，布局存 localStorage。 */
+(function initLayout() {
+  const main = document.querySelector("main");
+  const MIN = 200, MINH = 110;
+  const saved = JSON.parse(localStorage.getItem("nano-layout") || "{}");
+
+  function setVar(key, px) {
+    main.style.setProperty(key, px + "px");
+    saved[key] = Math.round(px);
+    localStorage.setItem("nano-layout", JSON.stringify(saved));
+  }
+  // 恢复上次布局
+  for (const [k, v] of Object.entries(saved)) main.style.setProperty(k, v + "px");
+
+  // 把手定义：v1 管 --c1、v2 管 --c2、h1 管 --r1（网格奇数轨道是面板，偶数是把手）
+  const handles = [
+    { cls: "v", area: "1 / 2 / 4 / 3", key: "--c1", axis: "x",
+      base: () => $("p-chat").offsetWidth, min: MIN,
+      max: () => main.clientWidth - 2 * MIN - 40 },
+    { cls: "v", area: "1 / 4 / 4 / 5", key: "--c2", axis: "x",
+      base: () => $("p-prompt").offsetWidth, min: MIN,
+      max: () => main.clientWidth - parseFloat(getComputedStyle(main).getPropertyValue("--c1") || 0) - MIN - 40 },
+    { cls: "h", area: "2 / 1 / 3 / 6", key: "--r1", axis: "y",
+      base: () => $("p-chat").offsetHeight, min: MINH,
+      max: () => main.clientHeight - MINH - 20 },
+  ];
+
+  handles.forEach((h) => {
+    const el = document.createElement("div");
+    el.className = `handle ${h.cls}`;
+    el.style.gridArea = h.area;
+    el.title = "拖动调整大小 · 双击重置布局";
+    main.appendChild(el);
+
+    el.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      // 首次拖动：把涉及的变量全部 px 化（fr 与 px 混用会导致分配不确定）
+      if (h.axis === "x") {
+        setVar("--c1", $("p-chat").offsetWidth);
+        setVar("--c2", $("p-prompt").offsetWidth);
+      } else {
+        setVar("--r1", $("p-chat").offsetHeight);
+      }
+      const start = h.axis === "x" ? e.clientX : e.clientY;
+      const basePx = h.base();
+      el.classList.add("active");
+      document.body.classList.add("resizing");
+      const move = (ev) => {
+        const delta = (h.axis === "x" ? ev.clientX : ev.clientY) - start;
+        setVar(h.key, Math.max(h.min(), Math.min(h.max(), basePx + delta)));
+      };
+      const up = () => {
+        window.removeEventListener("mousemove", move);
+        window.removeEventListener("mouseup", up);
+        el.classList.remove("active");
+        document.body.classList.remove("resizing");
+      };
+      window.addEventListener("mousemove", move);
+      window.addEventListener("mouseup", up);
+    });
+
+    el.addEventListener("dblclick", () => {  // 双击重置全部布局
+      ["--c1", "--c2", "--r1"].forEach((k) => main.style.removeProperty(k));
+      localStorage.removeItem("nano-layout");
+      Object.keys(saved).forEach((k) => delete saved[k]);
+    });
+  });
+})();
+
 connect(); refreshFiles(); updateStats();
