@@ -312,13 +312,13 @@ function connect() {
   // 把手定义：v1 管 --c1、v2 管 --c2、h1 管 --r1（网格奇数轨道是面板，偶数是把手）
   const handles = [
     { cls: "v", area: "1 / 2 / 4 / 3", key: "--c1", axis: "x",
-      base: () => $("p-chat").offsetWidth, min: MIN,
+      base: () => $("p-chat").offsetWidth, min: () => MIN,
       max: () => main.clientWidth - 2 * MIN - 40 },
     { cls: "v", area: "1 / 4 / 4 / 5", key: "--c2", axis: "x",
-      base: () => $("p-prompt").offsetWidth, min: MIN,
+      base: () => $("p-prompt").offsetWidth, min: () => MIN,
       max: () => main.clientWidth - parseFloat(getComputedStyle(main).getPropertyValue("--c1") || 0) - MIN - 40 },
     { cls: "h", area: "2 / 1 / 3 / 6", key: "--r1", axis: "y",
-      base: () => $("p-chat").offsetHeight, min: MINH,
+      base: () => $("p-chat").offsetHeight, min: () => MINH,
       max: () => main.clientHeight - MINH - 20 },
   ];
 
