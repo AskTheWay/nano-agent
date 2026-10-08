@@ -64,6 +64,8 @@ python -m nano_agent
 ```
 
 换个端点只是换个 `OPENAI_BASE_URL`（各端点实测差异见 docs/06）。
+Anthropic 原生协议也支持：`PROVIDER=anthropic`（或 auto 按 base_url 自动识别），
+需 `pip install anthropic`——多厂商适配层的设计见 [docs/08-providers.md](docs/08-providers.md)。
 
 **WebUI 观测台**（可选，学习向的可视化面板）：
 
@@ -134,7 +136,8 @@ LangGraph 概念 → 裸实现的映射表（你已经会的那套 → 这里的
 | **M3** 估算 + 压缩 | `nano_agent/context.py` | 182 | `estimate_messages()` / `find_safe_boundary()` / `maybe_compact()` |
 | **M4** 规则引擎 | `nano_agent/permissions.py` | 150 | `Rule.matches()` / `PermissionEngine.check()` |
 | **M5** 子代理 | `nano_agent/subagent.py` | 67 | `run_task()`（三道闸都在这 67 行里） |
-| 网关差异兜底 | `nano_agent/llm.py` | 95 | `LLMClient.chat()` / `Usage` |
+| **多厂商适配** | `nano_agent/providers/` | 300 | `get_provider()` 工厂 / `to_anthropic()` 协议转换（[docs/08](docs/08-providers.md)）|
+| 用量统计 + 工厂门面 | `nano_agent/llm.py` | 75 | `Usage` / `create_client()` |
 | 配置 / 终端 UI | `nano_agent/config.py` `ui.py` | 115 | `load_config()` / `confirm()` |
 
 总量：源码 ~1400 行（含中文注释）/ 测试 ~800 行 63 个单测 / 详解文档 7 篇。

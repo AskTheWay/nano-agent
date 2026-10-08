@@ -1,6 +1,9 @@
 openai>=1.40
 python-dotenv>=1.0
 
+# Anthropic 原生协议（可选：只用 OpenAI 兼容端点可不装）
+anthropic>=0.40
+
 # WebUI 观测台（可选：只用终端 REPL 可不装）
 fastapi>=0.110
 uvicorn>=0.29

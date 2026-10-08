@@ -56,6 +56,8 @@ git diff m1-loop m2-tools      # 看这一层加了什么（增量即一节课�
 | 04-permissions.md | deny-first 规则引擎（m4 解锁） |
 | 05-subagent.md | 上下文隔离的子循环（m5 解锁） |
 | 06-openai-protocol.md | 附录：function calling 协议逐字段 + 各网关实测差异 |
+| 07-webui.md | WebUI 观测台：六面板与事件总线 |
+| 08-providers.md | 多厂商适配：适配器模式、协议对照、连接池真相 |
 
 ## 五、参考的官方机制（合规声明）
 

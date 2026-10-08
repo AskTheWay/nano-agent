@@ -211,6 +211,7 @@ $("cfg-btn").onclick = async () => {
   const d = await (await fetch("/api/config")).json();
   $("cfg-url").value = d.base_url || "";
   $("cfg-model").value = d.model || "";
+  $("cfg-provider").value = d.provider || "auto";
   $("cfg-key").value = "";
   $("cfg-key").placeholder = d.api_key_masked
     ? `当前：${d.api_key_masked}（留空保留）` : "填入 API key";
@@ -226,6 +227,7 @@ $("cfg-save").onclick = async () => {
       base_url: $("cfg-url").value.trim(),
       api_key: $("cfg-key").value.trim(),
       model: $("cfg-model").value.trim(),
+      provider: $("cfg-provider").value,
     }) });
   const d = await r.json();
   if (!d.ok) { $("cfg-probe").textContent = d.error; return; }
@@ -241,7 +243,7 @@ function route(ev) {
     case "session_start":
       session.token_limit = ev.token_limit; session.rules = ev.rules;
       $("session-info").textContent =
-        `模型 ${ev.model} | 工具 ${ev.tools.length} 个 | 预算 ${ev.token_limit}`;
+        `模型 ${ev.model} | 协议 ${ev.provider || "auto"} | 工具 ${ev.tools.length} 个 | 预算 ${ev.token_limit}`;
       updateMeter(0);
       break;
     case "turn_start":

@@ -31,6 +31,8 @@ class AppConfig:
         self.max_turns = int(os.environ.get("MAX_TURNS", "25"))
         self.bash_timeout = int(os.environ.get("BASH_TIMEOUT", "10"))
         self.token_limit = int(os.environ.get("TOKEN_LIMIT", "30000"))  # M3 生效
+        # 厂商协议：openai / anthropic / auto（默认 auto，按 base_url 猜）
+        self.provider = os.environ.get("PROVIDER", "auto")
 
     def validate(self) -> None:
         """缺配置时给出可操作的报错，而不是让 SDK 抛一坨 traceback。"""

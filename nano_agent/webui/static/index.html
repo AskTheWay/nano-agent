@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>nano-agent 观测台</title>
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
 <header>
@@ -25,6 +25,11 @@
     <label>OPENAI_BASE_URL<input id="cfg-url" placeholder="https://open.bigmodel.cn/api/paas/v4"></label>
     <label>OPENAI_API_KEY<input id="cfg-key" type="password" placeholder="留空 = 保留当前值"></label>
     <label>MODEL_NAME<input id="cfg-model" placeholder="glm-4-flash"></label>
+    <label>PROVIDER（协议）<select id="cfg-provider">
+      <option value="auto">auto（按 base_url 猜）</option>
+      <option value="openai">openai（chat.completions 兼容）</option>
+      <option value="anthropic">anthropic（messages 原生）</option>
+    </select></label>
     <div class="cfg-actions">
       <span id="cfg-probe"></span>
       <button id="cfg-cancel">取消</button>
@@ -100,6 +105,6 @@
   </section>
 </main>
 
-<script src="app.js?v=6"></script>
+<script src="app.js?v=7"></script>
 </body>
 </html>

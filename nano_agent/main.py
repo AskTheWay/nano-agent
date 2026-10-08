@@ -9,7 +9,7 @@ import platform
 
 from . import ui
 from .config import load_config
-from .llm import LLMClient
+from .llm import create_client
 
 
 # ========== system prompt：能力的一半在工具，另一半在这里 ==========
@@ -102,7 +102,7 @@ def main() -> None:
     import os
     perm_path = os.path.join(os.getcwd(), "permissions.json")
     agent = Agent(
-        llm=LLMClient(cfg),
+        llm=create_client(cfg),  # 工厂：openai/anthropic 由 PROVIDER 与 base_url 决定
         tools=REGISTRY,
         system_prompt=build_system_prompt(),
         loop_cfg=LoopConfig(max_turns=cfg.max_turns),

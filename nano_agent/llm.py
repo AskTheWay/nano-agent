@@ -1,11 +1,15 @@
-"""LLM 调用封装：所有"OpenAI 兼容网关差异"的兜底都集中在这一个文件。
+"""LLM 层的门面：Usage 统计 + 工厂入口。
 
-对应 M1 单文件里的"第 4 段：LLM 调用"。
+历史沿革：M1~M5 这里是 LLMClient（OpenAI 协议直连）；provider 层拆出后，
+它只剩两个职责：
+1. Usage / _extract_cached —— 厂商无关的用量抽象（各 provider 共用）
+2. create_client(cfg)      —— 工厂入口，main/webui 组装时调用
+
+厂商差异的实现全部在 nano_agent/providers/ 下（见 docs/08-providers.md）。
 """
 
+import json
 from dataclasses import dataclass
-
-from openai import OpenAI
 
 
 # ========== 用量统计（M3 的 ContextManager 会吃这个） ==========
@@ -49,47 +53,16 @@ def _extract_cached(usage_obj) -> int:
     return 0
 
 
-class LLMClient:
-    """薄薄一层 client.chat.completions.create——薄到能看清协议，厚到能兜住差异。"""
+# ========== 工厂入口 ==========
 
-    def __init__(self, cfg) -> None:
-        self.model = cfg.model
-        self.extra_body = cfg.extra_body
-        self._client = OpenAI(base_url=cfg.base_url, api_key=cfg.api_key)
+def create_client(cfg):
+    """按配置构造 provider（openai / anthropic / auto 按 base_url 猜）。
 
-    def chat(self, messages: list[dict], tools: list[dict] | None = None) -> tuple[dict, Usage]:
-        """发一次补全请求。
+    返回值满足 BaseProvider 契约：chat(messages, tools) -> (dict, Usage)。
+    """
+    from .providers import get_provider
+    return get_provider(cfg)
 
-        返回 (assistant 消息裸 dict, usage)。
 
-        兜底清单（各兼容网关的真实差异，实测踩出来的）：
-        - tool_calls 为 None/缺失时【省略】该字段，取 [] 的兜底在 agent.py
-          的 .get("tool_calls", []) —— 两层各管一段
-        - arguments 是 JSON *字符串*               -> 解析容错放在 agent.py
-        - 不传 parallel_tool_calls 参数             -> 一旦显式传（哪怕 false）
-                                                     部分网关直接 400
-        - schema 不用 strict 字段                   -> OpenAI 专属，兼容端会拒
-        """
-        resp = self._client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            tools=tools or None,  # 无工具时干脆不传该字段（有的网关对空数组敏感）
-            extra_body=self.extra_body,
-        )
-        msg = resp.choices[0].message
-        m = {"role": "assistant", "content": msg.content or ""}
-        if msg.tool_calls:
-            m["tool_calls"] = [
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {"name": tc.function.name, "arguments": tc.function.arguments},
-                }
-                for tc in msg.tool_calls
-            ]
-        usage = Usage()
-        if resp.usage:
-            usage.prompt_tokens = resp.usage.prompt_tokens or 0
-            usage.completion_tokens = resp.usage.completion_tokens or 0
-            usage.cached_tokens = _extract_cached(resp.usage)
-        return m, usage
+# 兼容别名：M1~M5 期间的调用写法 LLMClient(cfg) 仍然可用（测试/旧代码）
+from .providers.openai_provider import OpenAIProvider as LLMClient  # noqa: E402,F401

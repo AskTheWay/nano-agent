@@ -59,8 +59,8 @@ class WebConfirm:
 def _build_agent() -> Agent:
     """与 main.py 相同的组装 + bus 注入 + confirm 桥接。"""
     cfg = load_config()
-    from ..llm import LLMClient
-    llm = LLMClient(cfg)
+    from ..llm import create_client
+    llm = create_client(cfg)
     perm_path = os.path.join(os.getcwd(), "permissions.json")
     permissions = PermissionEngine(perm_path)
     agent = Agent(llm=llm, tools=REGISTRY, system_prompt=build_system_prompt(),
@@ -72,8 +72,8 @@ def _build_agent() -> Agent:
     task_tool.install(llm, permissions, bus=_bus)
     context.set_schema_tokens(REGISTRY.schema())  # 多了 task 的定义，重新计入
     ui.confirm = WebConfirm()  # 全局替换：agent 调 ui.confirm 时走网页按钮
-    _bus.emit("session_start", model=cfg.model, tools=REGISTRY.names(),
-              token_limit=cfg.token_limit,
+    _bus.emit("session_start", model=cfg.model, provider=getattr(cfg, "provider", "auto"),
+              tools=REGISTRY.names(), token_limit=cfg.token_limit,
               rules={"allow": [r.raw for r in permissions.allow],
                      "deny": [r.raw for r in permissions.deny]})
     return agent
@@ -94,15 +94,16 @@ def _mask(key: str) -> str:
     return (key[:6] + "…" + key[-4:]) if len(key) > 12 else "…"
 
 
-def _update_env_file(base_url: str, api_key: str, model: str) -> None:
-    """把三个变量写回 .env（保留其余行）。.env 已在 .gitignore。"""
+def _update_env_file(base_url: str, api_key: str, model: str,
+                     provider: str = "auto") -> None:
+    """把变量写回 .env（保留其余行）。.env 已在 .gitignore。"""
     path = os.path.join(os.getcwd(), ".env")
     lines = []
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
             lines = f.read().splitlines()
     values = {"OPENAI_BASE_URL": base_url, "OPENAI_API_KEY": api_key,
-              "MODEL_NAME": model}
+              "MODEL_NAME": model, "PROVIDER": provider}
     seen = set()
     out = []
     for ln in lines:
@@ -124,7 +125,7 @@ async def get_config():
     from ..config import AppConfig
     c = AppConfig()
     return {"base_url": c.base_url, "api_key_masked": _mask(c.api_key),
-            "model": c.model}
+            "model": c.model, "provider": getattr(c, "provider", "auto")}
 
 
 @app.post("/api/config")
@@ -136,11 +137,15 @@ async def set_config(body: dict):
     base_url = (body.get("base_url") or "").strip() or cur.base_url
     api_key = (body.get("api_key") or "").strip() or cur.api_key  # 留空 = 保留旧值
     model = (body.get("model") or "").strip() or cur.model
-    _update_env_file(base_url, api_key, model)
+    provider = (body.get("provider") or "").strip() or "auto"
+    if provider not in ("auto", "openai", "anthropic"):
+        return {"ok": False, "error": f"非法 provider：{provider}"}
+    _update_env_file(base_url, api_key, model, provider)
     # 环境变量优先级高于 .env（load_dotenv 不覆盖），必须同步覆盖进程环境
     os.environ["OPENAI_BASE_URL"] = base_url
     os.environ["OPENAI_API_KEY"] = api_key
     os.environ["MODEL_NAME"] = model
+    os.environ["PROVIDER"] = provider
     # 销毁重建（对话历史清零——模型都换了，旧上下文没有意义）
     with _agent_lock:
         _agent = None
