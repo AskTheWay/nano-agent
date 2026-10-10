@@ -36,9 +36,13 @@ class OpenAIProvider(BaseProvider):
                                                     部分网关直接 400
         - schema 不用 strict 字段                   -> OpenAI 专属，兼容端会拒
         """
+        # 防御性剥离：_thinking 等内部旁路字段绝不发给 API
+        # （部分严格网关对消息里的未知字段直接 400）
+        clean = [{k: v for k, v in m.items() if not k.startswith("_")}
+                 for m in messages]
         resp = self._client.chat.completions.create(
             model=self.model,
-            messages=messages,
+            messages=clean,
             tools=tools or None,  # 无工具时干脆不传该字段（有的网关对空数组敏感）
             extra_body=self.extra_body,
         )

@@ -63,6 +63,15 @@ body.resizing { user-select: none; cursor: inherit; }
 .body { padding: 8px 10px; flex: 1; min-height: 0; }
 .scroll { overflow-y: auto; }
 
+/* ① 对话流 —— 思考卡（旁路字段，视觉上区别于正式内容） */
+.msg.think details summary { cursor: pointer; list-style: none; color: #8957e5;
+  font-size: 11px; padding: 2px 0; }
+.msg.think details summary::-webkit-details-marker { display: none; }
+.msg.think { background: #1a1626; border-left: 3px solid #8957e5; font-size: 12px; }
+.msg.think pre { color: #8b949e; margin-top: 4px; padding: 6px; font-size: 11px;
+  background: #0d1117; border: 1px solid #21262d; border-radius: 4px;
+  white-space: pre-wrap; word-break: break-all; max-height: 260px; overflow-y: auto; }
+
 /* ① 对话流 */
 .msg { margin-bottom: 8px; padding: 6px 8px; border-radius: 4px; white-space: pre-wrap; word-break: break-all; }
 .msg.user { background: #1c2a3a; border-left: 3px solid #58a6ff; }

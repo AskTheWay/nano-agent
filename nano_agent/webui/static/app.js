@@ -259,6 +259,11 @@ function route(ev) {
     case "llm_response":
       stats.prompt += ev.usage.prompt; stats.cached += ev.usage.cached;
       updateStats();
+      if (ev.thinking_preview) {  // 思考块（旁路接收，不进上下文）——可折叠展示
+        addDiv("chat-flow", "msg think",
+          `<details><summary>💭 思考过程（${ev.thinking_preview.length} 字，点击展开）</summary>` +
+          `<pre>${esc(ev.thinking_preview)}</pre></details>`);
+      }
       if (ev.tool_calls.length) {
         chatMsg("sys", `模型请求调用 ${ev.tool_calls.length} 个工具：` +
           ev.tool_calls.map((c) => `${c.name}(${c.args.slice(0, 50)})`).join("，"));

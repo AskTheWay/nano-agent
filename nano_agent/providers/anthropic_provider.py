@@ -103,9 +103,17 @@ def from_anthropic(resp_msg) -> tuple[dict, Usage]:
     遍历分拣即可。
     """
     text_parts: list[str] = []
+    thinking_parts: list[str] = []
     tool_calls: list[dict] = []
     for block in resp_msg.content:
-        if block.type == "text":
+        if block.type == "thinking":
+            # 思考块：旁路存储到 _thinking（下划线 = 内部字段）。
+            # 为什么不放进 content：a) 不污染下一轮发给模型的上下文；
+            # b) 官方 Anthropic API 的 thinking 块回传有严格要求（须带
+            #    signature 原样回传且仅在开启思考时允许），当普通 text
+            #    塞回去会被拒。Z.AI/GLM 网关较宽容不强制，但保持规范。
+            thinking_parts.append(getattr(block, "thinking", "") or "")
+        elif block.type == "text":
             text_parts.append(block.text)
         elif block.type == "tool_use":
             # input 是 dict -> 规范格式要求 JSON 字符串
@@ -116,6 +124,8 @@ def from_anthropic(resp_msg) -> tuple[dict, Usage]:
                                                      ensure_ascii=False)},
             })
     m = {"role": "assistant", "content": "".join(text_parts)}
+    if thinking_parts:
+        m["_thinking"] = "\n".join(thinking_parts)  # 仅供观测/展示，不回传
     if tool_calls:
         m["tool_calls"] = tool_calls
 
@@ -149,16 +159,22 @@ class AnthropicProvider(BaseProvider):
                 "使用 Anthropic 协议需要安装 SDK：pip install anthropic") from e
         self.model = cfg.model
         self.max_tokens = DEFAULT_MAX_TOKENS
+        self._extra_body = cfg.extra_body  # 透传私有参数（如 {"thinking":{"type":"disabled"}}）
         self._client = Anthropic(base_url=cfg.base_url, api_key=cfg.api_key)
 
     def chat(self, messages: list[dict], tools: list[dict] | None = None
              ) -> tuple[dict, Usage]:
         system, msgs, tools_out = to_anthropic(messages, tools)
+        kwargs = {}
+        if self._extra_body:
+            # SDK 的 extra_body：把私有参数注入请求体顶层（httpx 层，不做校验）
+            kwargs["extra_body"] = self._extra_body
         resp = self._client.messages.create(
             model=self.model,
             max_tokens=self.max_tokens,      # 必填，不传直接 400
             system=system,                    # 顶层字段（None 时 SDK 忽略）
             messages=msgs,
             tools=tools_out or None,
+            **kwargs,
         )
         return from_anthropic(resp)

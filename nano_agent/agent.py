@@ -111,6 +111,7 @@ class Agent:
             if self.bus:
                 u = usage or Usage()
                 self._emit("llm_response",
+                           thinking_preview=(assistant.get("_thinking") or "")[:400],
                            text_preview=(assistant["content"] or "")[:100],
                            tool_calls=[{"id": tc["id"], "name": tc["function"]["name"],
                                         "args": (tc["function"].get("arguments") or "")[:120]}

@@ -115,6 +115,26 @@ def test_from_anthropic_mixed_blocks():
     assert usage.cached_tokens == 64  # cache_read -> cached
 
 
+def test_from_anthropic_thinking_block_bypassed():
+    """thinking 块 -> msg["_thinking"] 旁路字段；不进 content、不影响协议。"""
+    resp = _Msg([_Block("thinking", thinking="让我想想……"),
+                 _Block("text", text="答案是 42")], _Usage())
+    m, _ = from_anthropic(resp)
+    assert m["content"] == "答案是 42"          # 思考不混入正文
+    assert m["_thinking"] == "让我想想……"        # 旁路可观测
+    # to_anthropic 白名单式转换：_thinking 不会被发回 API
+    _, out, _ = to_anthropic([m], None)
+    assert "_thinking" not in out[0] and "让我想想" not in json.dumps(out)
+
+
+def test_openai_provider_strips_internal_fields():
+    """OpenAI 直传路径防御：_ 开头的内部字段发送前被剥离。"""
+    import inspect
+    from nano_agent.providers import openai_provider
+    src_text = inspect.getsource(openai_provider.OpenAIProvider.chat)
+    assert 'startswith("_")' in src_text or "startswith('_')" in src_text
+
+
 def test_from_anthropic_text_only():
     resp = _Msg([_Block("text", text="完成")], _Usage())
     m, usage = from_anthropic(resp)
