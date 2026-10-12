@@ -3,6 +3,18 @@
 > 启动：`python -m nano_agent.webui`，浏览器打开 http://127.0.0.1:8765
 > 依赖：`pip install fastapi uvicorn`（可选依赖，只用终端 REPL 可不装）
 
+## 核心代码对照（行号以当前 main 为准）
+
+| 机制 | 位置 | 说明 |
+|---|---|---|
+| **事件总线** | [`events.py#L16`](../nano_agent/events.py#L16) | `EventBus`：线程安全、异常吞掉、13 类事件清单 |
+| 权限按钮桥 | [`server.py#L44`](../nano_agent/webui/server.py#L44) | `WebConfirm`：事件 + threading.Event 阻塞等应答 |
+| Agent 组装 | [`server.py#L59`](../nano_agent/webui/server.py#L59) | `_build_agent()`：与 REPL 同构 + bus 注入 |
+| 配置热重载 | [`server.py#L132`](../nano_agent/webui/server.py#L132) | `set_config()`：写 .env→销毁重建→探活 |
+| 事件泵 | [`server.py#L171`](../nano_agent/webui/server.py#L171) | `_event_pump()`：queue→WebSocket，50ms 轮询 |
+| 前端路由 | [`app.js`](../nano_agent/webui/static/app.js) | `route()`：按事件 type 分发六面板 |
+| 埋点样例 | [`agent.py#L53`](../nano_agent/agent.py#L53) | `_emit()`：bus=None 零开销 + source 分流 |
+
 ## 一、这是什么
 
 一个**学习向的观测台**（observability console），不是产品化 UI——

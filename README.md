@@ -126,19 +126,23 @@ LangGraph 概念 → 裸实现的映射表（你已经会的那套 → 这里的
 
 ## 代码地图（demo 时直接跳转）
 
-| 机制 | 文件 | 行数 | 核心入口 |
-|---|---|---|---|
-| REPL + 斜杠命令 | `nano_agent/main.py` | 166 | `main()` / `build_system_prompt()` |
-| **M1** while 循环 | `nano_agent/agent.py` | 198 | `Agent.run()` |
-| **M2** 调度器 | `nano_agent/agent.py` | 198 | `_execute_calls()`（分组 → 并行/串行 → 原序回填） |
-| **M2** schema 反射生成 | `nano_agent/tools/registry.py` | 133 | `build_schema()` / `@tool` 装饰器 |
-| **M2** 工具实现 ×7 | `nano_agent/tools/{fs,search,shell,task}.py` | 287 | read_file / write_file / edit_file / glob / grep / bash / task |
-| **M3** 估算 + 压缩 | `nano_agent/context.py` | 182 | `estimate_messages()` / `find_safe_boundary()` / `maybe_compact()` |
-| **M4** 规则引擎 | `nano_agent/permissions.py` | 150 | `Rule.matches()` / `PermissionEngine.check()` |
-| **M5** 子代理 | `nano_agent/subagent.py` | 67 | `run_task()`（三道闸都在这 67 行里） |
-| **多厂商适配** | `nano_agent/providers/` | 300 | `get_provider()` 工厂 / `to_anthropic()` 协议转换（[docs/08](docs/08-providers.md)）|
-| 用量统计 + 工厂门面 | `nano_agent/llm.py` | 75 | `Usage` / `create_client()` |
-| 配置 / 终端 UI | `nano_agent/config.py` `ui.py` | 115 | `load_config()` / `confirm()` |
+| 机制 | 核心入口（GitHub 可点击） | 配套详解 |
+|---|---|---|
+| REPL + 斜杠命令 | [`main.py` 的 `main()`](nano_agent/main.py#L127) / [`build_system_prompt()`](nano_agent/main.py#L17) | [01](docs/01-agent-loop.md) |
+| **M1** while 循环 | [`agent.py` 的 `Agent.run()`](nano_agent/agent.py#L63) | [01](docs/01-agent-loop.md) |
+| **M2** 调度器 | [`agent.py` 的 `_execute_calls()`](nano_agent/agent.py#L132)（分组→并行/串行→原序回填） | [02](docs/02-tools.md) |
+| **M2** schema 反射 | [`registry.py` 的 `build_schema()`](nano_agent/tools/registry.py#L30) / [`@tool`](nano_agent/tools/registry.py#L115) | [02](docs/02-tools.md) |
+| **M2** 工具 ×7 | [fs.py](nano_agent/tools/fs.py) · [search.py](nano_agent/tools/search.py) · [shell.py](nano_agent/tools/shell.py) · [task.py](nano_agent/tools/task.py) | [02](docs/02-tools.md) |
+| **M3** 估算+压缩 | [`context.py` 的 `estimate_messages()`](nano_agent/context.py#L35) / [`find_safe_boundary()`](nano_agent/context.py#L48) / [`maybe_compact()`](nano_agent/context.py#L132) | [03](docs/03-context.md) |
+| **M4** 规则引擎 | [`permissions.py` 的 `Rule.matches()`](nano_agent/permissions.py#L47) / [`check()`](nano_agent/permissions.py#L115) | [04](docs/04-permissions.md) |
+| **M5** 子代理 | [`subagent.py` 的 `run_task()`](nano_agent/subagent.py#L42)（三道闸全在这） | [05](docs/05-subagent.md) |
+| 多厂商适配 | [`get_provider()`](nano_agent/providers/__init__.py#L34) / [`to_anthropic()`](nano_agent/providers/anthropic_provider.py#L37) | [08](docs/08-providers.md) |
+| 用量 + 工厂门面 | [`llm.py` 的 `Usage`](nano_agent/llm.py#L18) / [`create_client()`](nano_agent/llm.py#L58) | [06](docs/06-openai-protocol.md) |
+| 观测事件总线 | [`events.py` 的 `EventBus`](nano_agent/events.py#L16) | [07](docs/07-webui.md) |
+| WebUI 服务端 | [`server.py` 的 `_build_agent()`](nano_agent/webui/server.py#L59) / [`_event_pump()`](nano_agent/webui/server.py#L171) | [07](docs/07-webui.md) |
+
+> 每篇详解文档开头也有同款「核心代码对照」表（带行锚），三向互链：
+> README 地图 ↔ 详解文档 ↔ 源码。
 
 总量：源码 ~1400 行（含中文注释）/ 测试 ~800 行 63 个单测 / 详解文档 7 篇。
 

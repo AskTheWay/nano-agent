@@ -3,6 +3,19 @@
 > 对应代码：`git diff m2-tools m3-context`。对照官方机制：
 > "Manage context / auto-compact" 一节与 agent-loop 文档的 "What consumes context" 表。
 
+## 核心代码对照（行号以当前 main 为准）
+
+| 机制 | 位置 | 说明 |
+|---|---|---|
+| 字符级估算 | [`context.py#L28`](../nano_agent/context.py#L28) | `estimate_text()`：中文 1:1、英文 4:1 |
+| 历史估算 | [`context.py#L35`](../nano_agent/context.py#L35) | `estimate_messages()`：tool_calls 的 arguments 也占 token |
+| **压缩安全边界** | [`context.py#L48`](../nano_agent/context.py#L48) | `find_safe_boundary()`：停在 user 消息防孤儿 tool |
+| ContextManager | [`context.py#L69`](../nano_agent/context.py#L69) | 与 Agent 共享同一 messages 引用 |
+| 用量记录+对比日志 | [`context.py#L97`](../nano_agent/context.py#L97) | `record_usage()`：估算 vs API 实际偏差 |
+| /tokens 报告 | [`context.py#L113`](../nano_agent/context.py#L113) | `report()`：含缓存命中率（口径见 docs/06） |
+| **触发检查** | [`context.py#L132`](../nano_agent/context.py#L132) | `maybe_compact()`：超 80% 触发 + 压缩后复检告警 |
+| 执行压缩 | [`context.py#L143`](../nano_agent/context.py#L143) | `compact_now()`：摘要 + `messages[:]` 原地替换 |
+
 ## 一、上下文里到底有什么
 
 官方文档把上下文消耗分列（我们用估算器复现了这张表）：

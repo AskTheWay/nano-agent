@@ -3,6 +3,18 @@
 > 对应代码：`nano_agent/providers/`。这是新增的一层，建议对照
 > `git log` 里 provider 相关 commit 阅读本文。
 
+## 核心代码对照（行号以当前 main 为准）
+
+| 机制 | 位置 | 说明 |
+|---|---|---|
+| 契约 | [`base.py#L20`](../nano_agent/providers/base.py#L20) | `BaseProvider`：接口细则全在 docstring |
+| **工厂** | [`__init__.py#L34`](../nano_agent/providers/__init__.py#L34) | `get_provider()`：auto 按 base_url 猜协议 |
+| **请求方向转换** | [`anthropic_provider.py#L37`](../nano_agent/providers/anthropic_provider.py#L37) | `to_anthropic()`：system 提升/块化/合并 tool_result |
+| **响应方向转换** | [`anthropic_provider.py#L98`](../nano_agent/providers/anthropic_provider.py#L98) | `from_anthropic()`：块分拣 + thinking 旁路 + usage 口径 |
+| Provider 本体 | [`anthropic_provider.py#L151`](../nano_agent/providers/anthropic_provider.py#L151) | `AnthropicProvider`：单例 client + extra_body 透传 |
+| 直传适配器 | [`openai_provider.py#L13`](../nano_agent/providers/openai_provider.py#L13) | `OpenAIProvider`：规范格式即本协议 + _ 字段剥离 |
+| 门面 | [`llm.py#L58`](../nano_agent/llm.py#L58) | `create_client()`：main/webui 的统一入口 |
+
 ## 一、要解决的问题
 
 M1~M5 的 LLM 层只认一种协议（OpenAI chat.completions）。要接 Anthropic 原生

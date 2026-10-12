@@ -3,6 +3,18 @@
 > 对应代码：`git checkout m1-loop` 后看 `nano_agent/main.py`（单文件 ~250 行）。
 > 对照官方机制：code.claude.com/docs 的 "How Claude Code works" 与 Agent SDK "agent-loop" 页。
 
+## 核心代码对照（行号以当前 main 为准）
+
+| 机制 | 位置 | 说明 |
+|---|---|---|
+| 循环配置 | [`agent.py#L21`](../nano_agent/agent.py#L21) | `LoopConfig`：max_turns / 并行上限 / 重复检测阈值 |
+| Agent 本体 | [`agent.py#L27`](../nano_agent/agent.py#L27) | 消息历史就是一个 `list[dict]` |
+| **主循环** | [`agent.py#L63`](../nano_agent/agent.py#L63) | `Agent.run()`：while + 终止条件 + 观测埋点 |
+| 工具调用解析 | [`agent.py#L132`](../nano_agent/agent.py#L132) | `_execute_calls()` 第一步：arguments JSON 容错 |
+| 用量统计 | [`llm.py#L18`](../nano_agent/llm.py#L18) | `Usage`：prompt/completion/cached 三字段 |
+| REPL + 斜杠命令 | [`main.py#L127`](../nano_agent/main.py#L127) | `main()`：本地拦截，不进模型 |
+| system prompt 组装 | [`main.py#L17`](../nano_agent/main.py#L17) | `build_system_prompt()`：环境注入 |
+
 ## 一、先看全景：一次对话在循环里发生了什么
 
 ```

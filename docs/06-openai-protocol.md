@@ -2,6 +2,15 @@
 
 > 这一篇是查漏补缺的参考篇：协议字段逐个讲清 + 换模型端点时的实测坑。
 
+## 核心代码对照（行号以当前 main 为准）
+
+| 机制 | 位置 | 说明 |
+|---|---|---|
+| **兜底集中地** | [`openai_provider.py#L13`](../nano_agent/providers/openai_provider.py#L13) | `OpenAIProvider.chat()`：各网关差异清单在 docstring |
+| 缓存字段提取 | [`llm.py#L36`](../nano_agent/llm.py#L36) | `_extract_cached()`：四种方言逐个尝试 |
+| 用量口径 | [`llm.py#L18`](../nano_agent/llm.py#L18) | `Usage`：prompt=总输入、cached=其中命中 |
+| 配置加载 | [`config.py`](../nano_agent/config.py) | `AppConfig`：EXTRA_BODY 非法 JSON 容错 |
+
 ## 一、一次带工具的请求长什么样
 
 ```jsonc

@@ -3,6 +3,19 @@
 > 对应代码：`git diff m3-context m4-permissions`。对照官方机制：
 > Permissions (IAM) 与 Settings 页的 `Tool(specifier)` 规则语法。
 
+## 核心代码对照（行号以当前 main 为准）
+
+| 机制 | 位置 | 说明 |
+|---|---|---|
+| 规则解析 | [`permissions.py#L37`](../nano_agent/permissions.py#L37) | `Rule`：`tool(specifier)` 语法 |
+| **规则匹配** | [`permissions.py#L47`](../nano_agent/permissions.py#L47) | `matches()`：工具名通配 / bash 前缀 / 路径 glob |
+| 路径匹配辅助 | [`permissions.py#L70`](../nano_agent/permissions.py#L70) | `_path_match()`：补 fnmatch `**` 零层语义 |
+| 引擎（deny-first） | [`permissions.py#L84`](../nano_agent/permissions.py#L84) | `PermissionEngine`：配置加载原子化 |
+| **三态判定** | [`permissions.py#L115`](../nano_agent/permissions.py#L115) | `check()`：deny→allow→ask 纯函数 |
+| 会话级放行 | [`permissions.py#L125`](../nano_agent/permissions.py#L125) | `remember_allow()`：y/n/a 里 a 的落地 |
+| 拒绝观测文本 | [`permissions.py#L146`](../nano_agent/permissions.py#L146) | `denied_observation()`：可行动的错误 |
+| 示例规则 | [`permissions.json`](../permissions.json) | deny 含 `read_file(**/.env)` 等 |
+
 ## 一、为什么 coding agent 必须有权限层
 
 bash / write_file 本质是**任意代码执行**。没有权限层的 agent 等于把 shell

@@ -3,6 +3,15 @@
 > 对应代码：`git diff m4-permissions m5-subagent`。对照官方机制：
 > Sub-agents 文档的"独立上下文窗口"一节。
 
+## 核心代码对照（行号以当前 main 为准）
+
+| 机制 | 位置 | 说明 |
+|---|---|---|
+| 类型表 | [`subagent.py#L23`](../nano_agent/subagent.py#L23) | `SUBAGENT_TYPES`：加类型即生效（描述动态生成） |
+| **run_task** | [`subagent.py#L42`](../nano_agent/subagent.py#L42) | 三道闸全在这：全新 messages / 工具子集 / 共享权限 |
+| task 工具工厂 | [`task.py#L14`](../nano_agent/tools/task.py#L14) | `install()`：依赖闭包，注册时机由依赖决定 |
+| 子集注册表 | [`registry.py#L100`](../nano_agent/tools/registry.py#L100) | `subset()`：闸 2 的实现（子集不含 task） |
+
 ## 一、要解决什么问题
 
 让主 agent"调研一下这个项目里所有用了装饰器的地方"。不派子代理的走法：

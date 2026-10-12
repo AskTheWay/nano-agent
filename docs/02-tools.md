@@ -3,6 +3,21 @@
 > 对应代码：`git diff m1-loop m2-tools`。对照官方机制：Tools reference（截断与约定）、
 > agent-loop 文档里 "read-only 工具可并行" 的调度规则。
 
+## 核心代码对照（行号以当前 main 为准）
+
+| 机制 | 位置 | 说明 |
+|---|---|---|
+| **schema 反射生成** | [`registry.py#L30`](../nano_agent/tools/registry.py#L30) | `build_schema()`：inspect + Annotated 拆包 |
+| 工具规格 | [`registry.py#L61`](../nano_agent/tools/registry.py#L61) | `ToolSpec`：name/description/parameters/func/read_only |
+| 注册表 | [`registry.py#L71`](../nano_agent/tools/registry.py#L71) | `ToolRegistry`：schema() 输出即 API 的 tools 参数 |
+| 子集注册表 | [`registry.py#L100`](../nano_agent/tools/registry.py#L100) | `subset()`：M5 子代理用，结构性防递归 |
+| @tool 装饰器 | [`registry.py#L115`](../nano_agent/tools/registry.py#L115) | docstring 首段作 description |
+| **调度器** | [`agent.py#L132`](../nano_agent/agent.py#L132) | `_execute_calls()`：解析→分组→并行/串行→原序回填 |
+| 单工具执行 | [`agent.py#L203`](../nano_agent/agent.py#L203) | `_call_one()`：权限闸门 + 错误即观测 |
+| 文件工具 | [`fs.py`](../nano_agent/tools/fs.py) | read_file（先切片后截断）/ write_file / edit_file（唯一替换） |
+| 搜索工具 | [`search.py`](../nano_agent/tools/search.py) | glob（段级剪枝）/ grep（纯标准库正则） |
+| shell 工具 | [`shell.py`](../nano_agent/tools/shell.py) | bash：双码页解码 + taskkill /T 进程树超时 |
+
 ## 一、M1 -> M2 拆分映射表（先看这个再 diff）
 
 M1 的单文件 main.py 按职责拆成了六个模块，diff 时对照这张表读：
