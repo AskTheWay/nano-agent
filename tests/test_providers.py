@@ -111,7 +111,9 @@ def test_from_anthropic_mixed_blocks():
     m, usage = from_anthropic(resp)
     assert m["content"] == "先看文件"
     assert m["tool_calls"][0]["function"]["arguments"] == '{"path": "a.py"}'  # JSON 字符串
-    assert usage.prompt_tokens == 100 and usage.completion_tokens == 20
+    # 口径统一：prompt = 非缓存输入 + cache_read + cache_creation = 100+64+8
+    # （Anthropic 的 input_tokens 不含缓存部分，须三者相加才对齐 OpenAI 口径）
+    assert usage.prompt_tokens == 172 and usage.completion_tokens == 20
     assert usage.cached_tokens == 64  # cache_read -> cached
 
 

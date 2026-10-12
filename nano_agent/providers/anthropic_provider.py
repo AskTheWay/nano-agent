@@ -132,11 +132,17 @@ def from_anthropic(resp_msg) -> tuple[dict, Usage]:
     usage = Usage()
     if resp_msg.usage:
         u = resp_msg.usage
-        usage.prompt_tokens = getattr(u, "input_tokens", 0) or 0
+        # 口径统一（重要）：Anthropic 的 input_tokens 【不包含】缓存部分，
+        # cache_read / cache_creation 是单列字段；而 OpenAI 的 prompt_tokens
+        # 【包含】cached。为让两家在统一 Usage 上语义一致：
+        #   prompt_tokens = 总输入（三者之和，对齐 OpenAI 口径）
+        #   cached_tokens = 其中命中缓存的部分（cache_read）
+        cache_read = getattr(u, "cache_read_input_tokens", 0) or 0
+        cache_creation = getattr(u, "cache_creation_input_tokens", 0) or 0
+        usage.prompt_tokens = (getattr(u, "input_tokens", 0) or 0) \
+            + cache_read + cache_creation
         usage.completion_tokens = getattr(u, "output_tokens", 0) or 0
-        # Anthropic 的缓存字段是显式的：cache_read 即"命中"，
-        # cache_creation 是本次新建缓存（下一轮才会命中）
-        usage.cached_tokens = getattr(u, "cache_read_input_tokens", 0) or 0
+        usage.cached_tokens = cache_read
     return m, usage
 
 
